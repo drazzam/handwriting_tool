@@ -426,7 +426,7 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
 def main():
     """Main application"""
     
-    # Initialize session state
+    # Initialize session state FIRST
     initialize_session_state()
     
     # Auto-load data on startup
@@ -458,6 +458,7 @@ def main():
             - Check that filenames match exactly (case-sensitive)
             - Verify file formats: PDF, JSON, TTF/OTF
             - Make sure files are not corrupted
+            - JSON file should be an array of objects: `[{{"case_id": "...", ...}}, ...]`
             
             **Current input folder location:** `{INPUT_FOLDER}`
             """)
@@ -465,6 +466,7 @@ def main():
         if st.button("🔄 Retry Loading Data"):
             st.session_state.data_loaded = False
             st.session_state.loading_error = None
+            st.session_state.cases_data = []  # Reset to empty list
             st.rerun()
         
         return

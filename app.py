@@ -4,6 +4,7 @@ import zipfile
 import os
 import tempfile
 import base64
+import re
 from io import BytesIO
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -31,36 +32,57 @@ PDF_FILE = "empty_form.pdf"
 CASES_FILE = "cases_data.json"
 FONT_FILE = "AzzamHandwriting-Regular.ttf"
 
-# Initialize session state with FIXED field specs including signature
+# Initialize session state with CORRECTED field positions based on actual PDF
 def initialize_session_state():
     if 'field_specs' not in st.session_state:
+        # FIXED: Corrected positions based on your actual PDF layout
         st.session_state.field_specs = {
             "page1": {
-                "date": {"x": 2.87, "y": 3.65, "w": 1.75, "h": 0.31, "font": 20},
-                "age_gender": {"x": 2.87, "y": 3.04, "w": 3.21, "h": 0.25, "font": 16},
-                "main_theme": {"x": 2.74, "y": 4.42, "w": 5.25, "h": 0.5, "font": 21},
-                "case_summary": {"x": 0.34, "y": 5.25, "w": 7.70, "h": 1.04, "font": 18},
-                "self_reflection_upper": {"x": 2.15, "y": 6.34, "w": 5.84, "h": 0.66, "font": 15},
-                "self_reflection_lower": {"x": 4.00, "y": 7.12, "w": 4.00, "h": 1.17, "font": 15},
-                "signature_mi": {"x": 1.0, "y": 9.5, "w": 3.0, "h": 0.5, "font": 14}
+                # Date field - right side after "Date:" label
+                "date": {"x": 1.5, "y": 2.6, "w": 2.5, "h": 0.25, "font": 14},
+                
+                # Age & Gender - right side after "Age & Gender:" label
+                "age_gender": {"x": 2.2, "y": 3.0, "w": 3.0, "h": 0.25, "font": 14},
+                
+                # Main theme - large box area
+                "main_theme": {"x": 1.2, "y": 3.6, "w": 6.5, "h": 0.4, "font": 14},
+                
+                # Case Summary - large text area
+                "case_summary": {"x": 0.8, "y": 4.3, "w": 7.0, "h": 1.5, "font": 12},
+                
+                # Self-reflection: What did I do right?
+                "self_reflection_upper": {"x": 0.8, "y": 6.2, "w": 7.0, "h": 0.6, "font": 12},
+                
+                # What needs more development? Plan
+                "self_reflection_lower": {"x": 0.8, "y": 7.0, "w": 7.0, "h": 1.0, "font": 12},
+                
+                # Signature at bottom
+                "signature_mi": {"x": 0.8, "y": 9.8, "w": 3.0, "h": 0.3, "font": 14}
             },
             "page2": {
-                "epa_row1": {"x": 0.62, "y": 3.30, "w": 1.5, "h": 0.45, "font": 32},
-                "epa_row2": {"x": 0.62, "y": 3.35, "w": 1.5, "h": 0.45, "font": 32},
-                "epa_row3": {"x": 0.62, "y": 4.18, "w": 1.5, "h": 0.45, "font": 32},
-                "epa_row4": {"x": 0.62, "y": 4.68, "w": 1.5, "h": 0.45, "font": 32},
-                "rubric_row1": {"x": 2.25, "y": 3.37, "w": 1.5, "h": 0.38, "font": 24},
-                "rubric_row2": {"x": 2.25, "y": 3.87, "w": 1.5, "h": 0.38, "font": 24},
-                "rubric_row3": {"x": 2.25, "y": 4.25, "w": 1.5, "h": 0.38, "font": 24},
-                "rubric_row4": {"x": 2.25, "y": 4.75, "w": 1.5, "h": 0.38, "font": 24},
-                "strength_row1": {"x": 3.87, "y": 3.37, "w": 1.63, "h": 0.38, "font": 16},
-                "strength_row2": {"x": 3.87, "y": 3.87, "w": 1.63, "h": 0.38, "font": 16},
-                "strength_row3": {"x": 3.87, "y": 4.30, "w": 1.63, "h": 0.38, "font": 16},
-                "strength_row4": {"x": 3.87, "y": 4.76, "w": 1.63, "h": 0.38, "font": 16},
-                "improve_row1": {"x": 5.50, "y": 3.37, "w": 1.62, "h": 0.38, "font": 16},
-                "improve_row2": {"x": 5.50, "y": 3.83, "w": 1.62, "h": 0.38, "font": 16},
-                "improve_row3": {"x": 5.50, "y": 4.29, "w": 1.62, "h": 0.38, "font": 16},
-                "improve_row4": {"x": 5.50, "y": 4.75, "w": 1.62, "h": 0.38, "font": 16}
+                # EPA tested column (4 rows)
+                "epa_row1": {"x": 0.6, "y": 1.8, "w": 1.8, "h": 0.35, "font": 14},
+                "epa_row2": {"x": 0.6, "y": 2.4, "w": 1.8, "h": 0.35, "font": 14},
+                "epa_row3": {"x": 0.6, "y": 3.0, "w": 1.8, "h": 0.35, "font": 14},
+                "epa_row4": {"x": 0.6, "y": 3.6, "w": 1.8, "h": 0.35, "font": 14},
+                
+                # Rubric column (4 rows)
+                "rubric_row1": {"x": 2.5, "y": 1.8, "w": 1.5, "h": 0.35, "font": 14},
+                "rubric_row2": {"x": 2.5, "y": 2.4, "w": 1.5, "h": 0.35, "font": 14},
+                "rubric_row3": {"x": 2.5, "y": 3.0, "w": 1.5, "h": 0.35, "font": 14},
+                "rubric_row4": {"x": 2.5, "y": 3.6, "w": 1.5, "h": 0.35, "font": 14},
+                
+                # Strength points column (4 rows)
+                "strength_row1": {"x": 4.1, "y": 1.8, "w": 1.8, "h": 0.35, "font": 12},
+                "strength_row2": {"x": 4.1, "y": 2.4, "w": 1.8, "h": 0.35, "font": 12},
+                "strength_row3": {"x": 4.1, "y": 3.0, "w": 1.8, "h": 0.35, "font": 12},
+                "strength_row4": {"x": 4.1, "y": 3.6, "w": 1.8, "h": 0.35, "font": 12},
+                
+                # Points needing improvement column (4 rows)
+                "improve_row1": {"x": 6.0, "y": 1.8, "w": 1.8, "h": 0.35, "font": 12},
+                "improve_row2": {"x": 6.0, "y": 2.4, "w": 1.8, "h": 0.35, "font": 12},
+                "improve_row3": {"x": 6.0, "y": 3.0, "w": 1.8, "h": 0.35, "font": 12},
+                "improve_row4": {"x": 6.0, "y": 3.6, "w": 1.8, "h": 0.35, "font": 12}
             }
         }
 
@@ -100,22 +122,101 @@ def load_pdf_as_images(pdf_bytes):
         st.error(f"Error converting PDF to images: {str(e)}")
         return {}
 
-def validate_case_data(case_data):
-    """Validate that case data is a dictionary with expected structure"""
-    if not isinstance(case_data, dict):
-        return False, "Case data must be a dictionary/object"
+def transform_case_format(original_case):
+    """Transform case from user's format to expected format"""
+    transformed = {}
     
-    # Check for at least some expected fields
-    expected_fields = ['case_id', 'date', 'age', 'gender', 'main_theme', 'case_summary']
-    if not any(field in case_data for field in expected_fields):
-        return False, f"Case data missing expected fields. Expected at least one of: {', '.join(expected_fields)}"
+    # Map Date -> date
+    if 'Date' in original_case:
+        transformed['date'] = original_case['Date']
     
-    return True, "Valid"
+    # Parse "Age & Gender" into combined field (keep it combined for display)
+    if 'Age & Gender' in original_case:
+        transformed['age_gender'] = original_case['Age & Gender']
+        
+        # Also extract separate fields for compatibility
+        age_gender = original_case['Age & Gender']
+        age_match = re.search(r'(\d+)', age_gender)
+        if age_match:
+            transformed['age'] = age_match.group(1)
+        
+        gender_lower = age_gender.lower()
+        if 'male' in gender_lower and 'female' not in gender_lower:
+            transformed['gender'] = 'Male'
+        elif 'female' in gender_lower:
+            transformed['gender'] = 'Female'
+        elif 'non-binary' in gender_lower or 'nonbinary' in gender_lower:
+            transformed['gender'] = 'Non-binary'
+        else:
+            transformed['gender'] = ''
+    
+    # Map field names
+    field_mappings = {
+        'Main theme of the case': 'main_theme',
+        'Case Summary': 'case_summary',
+        'Signature of the MI': 'signature_mi'
+    }
+    
+    for old_key, new_key in field_mappings.items():
+        if old_key in original_case:
+            transformed[new_key] = original_case[old_key]
+    
+    # Handle Self Reflection - parse the combined text
+    if 'Self Reflection' in original_case:
+        reflection_text = original_case['Self Reflection']
+        transformed['self_reflection'] = {}
+        
+        # Parse "Did well:" and "Needs work:" sections
+        if 'Did well:' in reflection_text:
+            parts = reflection_text.split('Needs work:')
+            if len(parts) >= 1:
+                did_well = parts[0].replace('Did well:', '').strip()
+                if 'Plan:' in did_well:
+                    did_well = did_well.split('Plan:')[0].strip()
+                transformed['self_reflection']['what_did_right'] = did_well
+            
+            if len(parts) >= 2:
+                needs_work = parts[1].strip()
+                # Include Plan part in needs development
+                transformed['self_reflection']['needs_development'] = needs_work
+        else:
+            transformed['self_reflection']['what_did_right'] = reflection_text
+            transformed['self_reflection']['needs_development'] = ''
+    
+    # Handle EPA assessment
+    transformed['epa_assessment'] = {}
+    
+    # EPA tested - convert numbers to "EPA X" format
+    if 'EPA tested' in original_case:
+        epas = original_case['EPA tested']
+        if isinstance(epas, list):
+            transformed['epa_assessment']['epa_tested'] = [f"EPA {epa}" if isinstance(epa, (int, float)) else str(epa) for epa in epas]
+        else:
+            transformed['epa_assessment']['epa_tested'] = []
+    
+    # Rubric levels
+    if 'Rubric' in original_case:
+        transformed['epa_assessment']['rubric_levels'] = original_case['Rubric'] if isinstance(original_case['Rubric'], list) else []
+    
+    # Strength points
+    if 'Strength points' in original_case:
+        transformed['epa_assessment']['strength_points'] = original_case['Strength points'] if isinstance(original_case['Strength points'], list) else []
+    
+    # Points needing improvement
+    if 'Points needing improvement' in original_case:
+        transformed['epa_assessment']['points_needing_improvement'] = original_case['Points needing improvement'] if isinstance(original_case['Points needing improvement'], list) else []
+    
+    # Generate a case_id if not present
+    if 'case_id' not in transformed:
+        date_part = transformed.get('date', '').replace('-', '')
+        theme_part = transformed.get('main_theme', 'case')[:20].replace(' ', '_').replace('/', '_')
+        transformed['case_id'] = f"case_{date_part}_{theme_part}" if date_part else f"case_{theme_part}"
+    
+    return transformed
 
 def load_input_data():
     """Load all required data from the input folder automatically"""
     
-    # Check if input folder exists
     if not os.path.exists(INPUT_FOLDER):
         st.session_state.loading_error = f"❌ Input folder not found at: {INPUT_FOLDER}"
         return False
@@ -136,7 +237,7 @@ def load_input_data():
         except Exception as e:
             errors.append(f"• Error loading {PDF_FILE}: {str(e)}")
     
-    # Load cases data from cases_data.json with ROBUST ERROR HANDLING
+    # Load cases data from cases_data.json
     cases_path = os.path.join(INPUT_FOLDER, CASES_FILE)
     if not os.path.exists(cases_path):
         errors.append(f"• Missing: {CASES_FILE}")
@@ -145,50 +246,61 @@ def load_input_data():
             with open(cases_path, 'r', encoding='utf-8') as f:
                 loaded_data = json.load(f)
             
-            # CRITICAL FIX: Validate the loaded data structure
             if loaded_data is None:
                 errors.append(f"• {CASES_FILE} is empty or null")
                 st.session_state.cases_data = []
             elif isinstance(loaded_data, str):
-                # Handle case where JSON might be double-encoded
                 try:
                     loaded_data = json.loads(loaded_data)
                 except:
-                    errors.append(f"• {CASES_FILE} contains a string instead of JSON array")
+                    errors.append(f"• {CASES_FILE} contains a string instead of JSON")
                     st.session_state.cases_data = []
             
-            # Ensure loaded_data is a list
-            if isinstance(loaded_data, list):
-                # Validate each case in the list
+            # Handle object with "cases" array (YOUR FORMAT)
+            if isinstance(loaded_data, dict) and 'cases' in loaded_data:
+                cases_array = loaded_data['cases']
+                if isinstance(cases_array, list):
+                    valid_cases = []
+                    for i, case in enumerate(cases_array):
+                        if isinstance(case, dict):
+                            try:
+                                transformed_case = transform_case_format(case)
+                                valid_cases.append(transformed_case)
+                            except Exception as e:
+                                errors.append(f"• Case {i+1} transformation error: {str(e)}")
+                        else:
+                            errors.append(f"• Case {i+1} is not a valid object")
+                    
+                    st.session_state.cases_data = valid_cases
+                    
+                    if not valid_cases:
+                        errors.append(f"• No valid cases found after transformation")
+                else:
+                    errors.append(f"• 'cases' property is not an array")
+                    st.session_state.cases_data = []
+            
+            # Handle direct array format
+            elif isinstance(loaded_data, list):
                 valid_cases = []
                 for i, case in enumerate(loaded_data):
                     if isinstance(case, dict):
-                        valid_cases.append(case)
-                    elif isinstance(case, str):
-                        # Try to parse string as JSON
-                        try:
-                            parsed_case = json.loads(case)
-                            if isinstance(parsed_case, dict):
-                                valid_cases.append(parsed_case)
-                            else:
-                                errors.append(f"• Case {i+1} is not a valid object")
-                        except:
-                            errors.append(f"• Case {i+1} is a string but not valid JSON")
+                        if 'Date' in case or 'Age & Gender' in case:
+                            try:
+                                transformed_case = transform_case_format(case)
+                                valid_cases.append(transformed_case)
+                            except Exception as e:
+                                errors.append(f"• Case {i+1} transformation error: {str(e)}")
+                        else:
+                            valid_cases.append(case)
                     else:
                         errors.append(f"• Case {i+1} has invalid type: {type(case).__name__}")
                 
                 st.session_state.cases_data = valid_cases
                 
-                if len(valid_cases) < len(loaded_data):
-                    errors.append(f"• Only {len(valid_cases)} of {len(loaded_data)} cases are valid")
-                
                 if not valid_cases:
                     errors.append(f"• No valid cases found in {CASES_FILE}")
-            elif isinstance(loaded_data, dict):
-                # Single case wrapped in object - convert to list
-                st.session_state.cases_data = [loaded_data]
             else:
-                errors.append(f"• {CASES_FILE} must contain a JSON array, got {type(loaded_data).__name__}")
+                errors.append(f"• {CASES_FILE} must contain JSON array or object with 'cases' array")
                 st.session_state.cases_data = []
                 
         except json.JSONDecodeError as e:
@@ -204,11 +316,9 @@ def load_input_data():
         try:
             with open(font_path, 'rb') as f:
                 st.session_state.font_bytes = f.read()
-        except Exception as e:
-            # Font is optional, so just warn
+        except:
             pass
     
-    # Check for errors
     if errors:
         st.session_state.loading_error = "❌ **Data Loading Errors:**\n\n" + "\n".join(errors)
         return False
@@ -228,20 +338,16 @@ def create_interactive_plotly_figure(page_num):
     if page_num not in st.session_state.pdf_images:
         return None
     
-    # Get image
     img = st.session_state.pdf_images[page_num]
     img_height, img_width = img.shape[:2]
     
-    # Convert image to base64 for Plotly
     img_pil = Image.fromarray(img)
     buffer = BytesIO()
     img_pil.save(buffer, format='PNG')
     img_base64 = base64.b64encode(buffer.getvalue()).decode()
     
-    # Create figure
     fig = go.Figure()
     
-    # Add background image
     fig.add_layout_image(
         dict(
             source=f"data:image/png;base64,{img_base64}",
@@ -254,21 +360,18 @@ def create_interactive_plotly_figure(page_num):
         )
     )
     
-    # Add draggable shapes for each field
     page_key = f"page{page_num}"
     colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan',
               'magenta', 'yellow', 'lime', 'navy', 'teal', 'silver', 'maroon', 'fuchsia', 'aqua', 'black']
     
     for i, (field_name, spec) in enumerate(st.session_state.field_specs[page_key].items()):
-        # Convert inches to pixels
         x_px = inches_to_pixels(spec['x'])
-        y_px = img_height - inches_to_pixels(spec['y'] + spec['h'])  # Flip Y for Plotly
+        y_px = img_height - inches_to_pixels(spec['y'] + spec['h'])
         w_px = inches_to_pixels(spec['w'])
         h_px = inches_to_pixels(spec['h'])
         
         color = colors[i % len(colors)]
         
-        # Highlight selected field
         if field_name == st.session_state.selected_field:
             color = 'lime'
             opacity = 0.6
@@ -277,7 +380,6 @@ def create_interactive_plotly_figure(page_num):
             opacity = 0.3
             line_width = 2
         
-        # Add draggable rectangle
         fig.add_shape(
             type="rect",
             x0=x_px, y0=y_px,
@@ -285,12 +387,11 @@ def create_interactive_plotly_figure(page_num):
             line=dict(color=color, width=line_width),
             fillcolor=color,
             opacity=opacity,
-            editable=True,  # This makes it draggable
+            editable=True,
             name=field_name,
             layer="above"
         )
         
-        # Add text annotation
         fig.add_annotation(
             x=x_px + w_px/2,
             y=y_px + h_px/2,
@@ -303,7 +404,6 @@ def create_interactive_plotly_figure(page_num):
             borderwidth=1
         )
     
-    # Configure layout
     fig.update_layout(
         title=dict(
             text=f"🎯 Page {page_num} - Interactive Field Positioning<br>" +
@@ -334,32 +434,28 @@ def create_interactive_plotly_figure(page_num):
         dragmode='pan'
     )
     
-    # Enable shape editing
     fig.update_shapes(dict(editable=True))
     
     return fig
 
 def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
-    """Create filled PDF for a single case with ROBUST ERROR HANDLING"""
+    """Create filled PDF for a single case with ACTUAL DATA"""
     try:
-        # CRITICAL FIX: Validate case_data is a dictionary
         if not isinstance(case_data, dict):
-            st.error(f"Invalid case data type: {type(case_data).__name__}. Expected dictionary.")
+            st.error(f"Invalid case data type: {type(case_data).__name__}")
             return None
             
         overlay_buffer = BytesIO()
         
-        # Get original PDF dimensions
         original = PdfReader(BytesIO(pdf_bytes))
         first_page = original.pages[0]
         page_width = float(first_page.mediabox.width)
         page_height = float(first_page.mediabox.height)
         
-        # Create canvas
         c = canvas.Canvas(overlay_buffer, pagesize=(page_width, page_height))
         
         # Setup font
-        font_color = Color(0.102, 0.227, 0.486)  # #1A3A7C
+        font_color = Color(0.102, 0.227, 0.486)  # Blue color
         font_name = 'Helvetica'
         
         if font_bytes:
@@ -370,11 +466,12 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
                 
                 pdfmetrics.registerFont(TTFont('CustomFont', tmp_font_path))
                 font_name = 'CustomFont'
-                os.unlink(tmp_font_path)  # Clean up
+                os.unlink(tmp_font_path)
             except:
                 pass
         
         def draw_text(text, spec, page_height):
+            """Draw text using CURRENT field positions from session state"""
             if not text:
                 return
             
@@ -390,7 +487,7 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
             c.setFillColor(font_color)
             
             # Handle long text with wrapping
-            if len(text) > 50:
+            if len(text) > 50 and spec['h'] > 0.5:
                 words = text.split()
                 lines = []
                 current_line = ""
@@ -414,66 +511,77 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
                 start_y = y_pts + (len(lines) - 1) * line_height / 2
                 
                 for line in lines:
-                    line_width = c.stringWidth(line, font_name, spec['font'])
-                    x_centered = x_pts + (w_pts - line_width) / 2
-                    c.drawString(x_centered, start_y, line)
+                    c.drawString(x_pts + 5, start_y, line)
                     start_y -= line_height
             else:
-                # Single line
-                text_width = c.stringWidth(text, font_name, spec['font'])
-                x_centered = x_pts + (w_pts - text_width) / 2
-                c.drawString(x_centered, y_pts, text)
+                # Single line - left align for most fields
+                c.drawString(x_pts + 5, y_pts, text)
         
-        # Fill Page 1 - INCLUDING SIGNATURE
-        page1 = st.session_state.field_specs['page1']
+        # FILL PAGE 1 WITH ACTUAL DATA - Use CURRENT positions from session state
+        page1_specs = st.session_state.field_specs['page1']
         
-        # SAFE GET with defaults to handle missing fields
-        draw_text(case_data.get('date', ''), page1['date'], page_height)
+        # Fill Date
+        draw_text(case_data.get('date', ''), page1_specs['date'], page_height)
         
-        age_gender = f"{case_data.get('age', '')} {case_data.get('gender', '')}".strip()
-        draw_text(age_gender, page1['age_gender'], page_height)
+        # Fill Age & Gender (use combined field if available, otherwise combine)
+        if 'age_gender' in case_data:
+            draw_text(case_data['age_gender'], page1_specs['age_gender'], page_height)
+        else:
+            age_gender = f"{case_data.get('age', '')} {case_data.get('gender', '')}".strip()
+            draw_text(age_gender, page1_specs['age_gender'], page_height)
         
-        draw_text(case_data.get('main_theme', ''), page1['main_theme'], page_height)
-        draw_text(case_data.get('case_summary', ''), page1['case_summary'], page_height)
+        # Fill Main Theme
+        draw_text(case_data.get('main_theme', ''), page1_specs['main_theme'], page_height)
         
-        # Handle self_reflection - check if it exists and is a dict
+        # Fill Case Summary
+        draw_text(case_data.get('case_summary', ''), page1_specs['case_summary'], page_height)
+        
+        # Fill Self Reflection
         reflection = case_data.get('self_reflection', {})
         if isinstance(reflection, dict):
-            draw_text(reflection.get('what_did_right', ''), page1['self_reflection_upper'], page_height)
-            draw_text(reflection.get('needs_development', ''), page1['self_reflection_lower'], page_height)
+            draw_text(reflection.get('what_did_right', ''), page1_specs['self_reflection_upper'], page_height)
+            draw_text(reflection.get('needs_development', ''), page1_specs['self_reflection_lower'], page_height)
         
-        # SIGNATURE FIELD - FIXED
-        draw_text(case_data.get('signature_mi', ''), page1['signature_mi'], page_height)
+        # Fill Signature
+        draw_text(case_data.get('signature_mi', ''), page1_specs['signature_mi'], page_height)
         
-        # Page 2
+        # PAGE 2 - Fill with ACTUAL EPA data
         c.showPage()
-        page2 = st.session_state.field_specs['page2']
-        
-        # Handle EPA assessment - check if it exists and is a dict
+        page2_specs = st.session_state.field_specs['page2']
         epa_data = case_data.get('epa_assessment', {})
+        
         if isinstance(epa_data, dict):
-            # Fill EPA table with safe defaults
-            epas = epa_data.get('epa_tested', ['EPA 2', 'EPA 6', 'EPA 9', 'EPA 12'])
-            rubrics = epa_data.get('rubric_levels', ['Level C'] * 4)
-            strengths = epa_data.get('strength_points', ['Good work'] * 4)
-            improvements = epa_data.get('points_needing_improvement', ['Keep practicing'] * 4)
+            # Get ACTUAL data from case
+            epas = epa_data.get('epa_tested', [])
+            rubrics = epa_data.get('rubric_levels', [])
+            strengths = epa_data.get('strength_points', [])
+            improvements = epa_data.get('points_needing_improvement', [])
             
-            # Ensure lists are lists
+            # Ensure all are lists
             epas = epas if isinstance(epas, list) else []
             rubrics = rubrics if isinstance(rubrics, list) else []
             strengths = strengths if isinstance(strengths, list) else []
             improvements = improvements if isinstance(improvements, list) else []
             
-            for i in range(4):
-                row = i + 1
+            # Fill the table with ACTUAL data (up to 4 rows)
+            for i in range(min(4, max(len(epas), len(rubrics), len(strengths), len(improvements)))):
+                row_num = i + 1
+                
+                # Fill EPA column
                 if i < len(epas):
-                    draw_text(epas[i], page2[f'epa_row{row}'], page_height)
+                    draw_text(str(epas[i]), page2_specs[f'epa_row{row_num}'], page_height)
+                
+                # Fill Rubric column
                 if i < len(rubrics):
-                    draw_text(rubrics[i], page2[f'rubric_row{row}'], page_height)
+                    draw_text(str(rubrics[i]), page2_specs[f'rubric_row{row_num}'], page_height)
+                
+                # Fill Strength points column
                 if i < len(strengths):
-                    draw_text(strengths[i], page2[f'strength_row{row}'], page_height)
+                    draw_text(str(strengths[i]), page2_specs[f'strength_row{row_num}'], page_height)
+                
+                # Fill Points needing improvement column
                 if i < len(improvements):
-                    draw_text(improvements[i], page2[f'improve_row{row}'], page_height)
+                    draw_text(str(improvements[i]), page2_specs[f'improve_row{row_num}'], page_height)
         
         c.save()
         overlay_buffer.seek(0)
@@ -490,32 +598,29 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
                 page.merge_page(overlay_page)
             writer.add_page(page)
         
-        # Return PDF bytes
         output_buffer = BytesIO()
         writer.write(output_buffer)
         output_buffer.seek(0)
         return output_buffer.getvalue()
         
     except Exception as e:
-        st.error(f"Error creating PDF for case: {str(e)}")
+        st.error(f"Error creating PDF: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
         return None
 
 def main():
     """Main application"""
     
-    # Initialize session state FIRST
     initialize_session_state()
     
-    # Auto-load data on startup
     if not st.session_state.data_loaded and not st.session_state.loading_error:
         with st.spinner("🔄 Loading data from /input folder..."):
             load_input_data()
     
-    # Show header
     st.title("📋 PDF Medical Form Filler")
     st.markdown("*Interactive field positioning with drag-and-drop functionality*")
     
-    # Handle loading errors
     if st.session_state.loading_error:
         st.error(st.session_state.loading_error)
         
@@ -530,23 +635,8 @@ def main():
             └── {FONT_FILE}  # Custom font (optional)
             ```
             
-            **JSON Format Required:**
-            Your `{CASES_FILE}` can be in either of these formats:
-            
-            **Format 1 (Standard):**
-            ```json
-            [
-              {{
-                "case_id": "case_001",
-                "date": "2024-01-15",
-                "age": "28",
-                "gender": "Male",
-                ...
-              }}
-            ]
-            ```
-            
-            **Format 2 (Your Format - Automatically Converted):**
+            **JSON Format Accepted:**
+            Your format with `"cases"` array is automatically handled!
             ```json
             {{
               "cases": [
@@ -555,8 +645,8 @@ def main():
                   "Age & Gender": "28 year old male",
                   "Main theme of the case": "...",
                   "Case Summary": "...",
-                  "Self Reflection": "Did well: ... Needs work: ...",
-                  "Signature of the MI": "...",
+                  "Self Reflection": "Did well: ... Needs work: ... Plan: ...",
+                  "Signature of the MI": "Ahmed Yasser Elsayed Azzam",
                   "EPA tested": [2, 6, 9, 12],
                   "Rubric": ["Level C", ...],
                   "Strength points": [...],
@@ -565,40 +655,39 @@ def main():
               ]
             }}
             ```
-            
-            **Troubleshooting:**
-            - Ensure the `/input` folder exists in your repository
-            - Check that filenames match exactly (case-sensitive)
-            - Verify file formats: PDF, JSON, TTF/OTF
-            - Make sure files are not corrupted
-            - Validate JSON syntax at jsonlint.com
-            
-            **Current input folder location:** `{INPUT_FOLDER}`
             """)
         
         if st.button("🔄 Retry Loading Data"):
             st.session_state.data_loaded = False
             st.session_state.loading_error = None
-            st.session_state.cases_data = []  # Reset to empty list
+            st.session_state.cases_data = []
             st.rerun()
         
         return
     
-    # Show data status in sidebar
+    # Show data status
     st.sidebar.header("📁 Loaded Data")
     st.sidebar.success(f"✅ PDF Template: {PDF_FILE}")
     
-    # SAFE handling of cases count
     cases_count = len(st.session_state.cases_data) if isinstance(st.session_state.cases_data, list) else 0
     st.sidebar.success(f"✅ Cases: {cases_count} loaded")
     
     if st.session_state.font_bytes:
         st.sidebar.success(f"✅ Custom Font: {FONT_FILE}")
     else:
-        st.sidebar.info(f"ℹ️ Using default font (no {FONT_FILE} found)")
+        st.sidebar.info(f"ℹ️ Using default font")
     
     st.sidebar.markdown("---")
-    st.sidebar.caption(f"📂 Data source: `/input` folder")
+    
+    # Show loaded cases summary
+    if cases_count > 0:
+        st.sidebar.subheader("📊 Cases Summary")
+        for i, case in enumerate(st.session_state.cases_data[:5]):
+            case_id = case.get('case_id', f'Case {i+1}')
+            date = case.get('date', 'No date')
+            st.sidebar.text(f"{i+1}. {date} - {case_id[:30]}")
+        if cases_count > 5:
+            st.sidebar.text(f"... and {cases_count - 5} more")
     
     # Main interface
     col1, col2 = st.columns([3, 1])
@@ -606,7 +695,6 @@ def main():
     with col1:
         st.header("🎯 Interactive Field Positioning")
         
-        # Page and field selection with FIXED session state handling
         col_page, col_field = st.columns([1, 2])
         
         with col_page:
@@ -618,7 +706,6 @@ def main():
             page_key = f"page{current_page}"
             field_names = list(st.session_state.field_specs[page_key].keys())
             
-            # FIXED: Ensure selected field is valid for current page
             if (st.session_state.selected_field is None or 
                 st.session_state.selected_field not in field_names):
                 st.session_state.selected_field = field_names[0] if field_names else None
@@ -630,23 +717,21 @@ def main():
                                             key=f"field_selector_{current_page}")
                 st.session_state.selected_field = selected_field
         
-        # Create and display interactive Plotly figure
         if current_page in st.session_state.pdf_images:
             fig = create_interactive_plotly_figure(current_page)
             
             if fig:
                 st.plotly_chart(fig, use_container_width=True, key=f"plotly_fig_{current_page}")
                 
-                st.info("💡 **Tip:** Drag the colored rectangles directly on the PDF to reposition fields. Green = selected field.")
+                st.info("💡 **Tip:** Drag the colored rectangles to reposition fields. Fine-tune with sliders below.")
         
-        # FIXED: Precise adjustment controls with proper session state preservation
+        # Field adjustment controls
         st.subheader(f"📐 Fine-tune '{st.session_state.selected_field}' Position")
         
         if st.session_state.selected_field:
             page_key = f"page{current_page}"
             spec = st.session_state.field_specs[page_key][st.session_state.selected_field]
             
-            # FIXED: Use unique keys that persist across page switches
             field_key = f"{page_key}_{st.session_state.selected_field}"
             
             col_x, col_y = st.columns(2)
@@ -665,19 +750,17 @@ def main():
                 new_h = st.slider("Height (inches)", 0.1, 3.0, value=float(spec['h']), step=0.05,
                                 key=f"h_{field_key}")
             
-            # FIXED: Update field specs immediately to preserve changes
-            st.session_state.field_specs[page_key][st.session_state.selected_field]['x'] = round(new_x, 2)
-            st.session_state.field_specs[page_key][st.session_state.selected_field]['y'] = round(new_y, 2)
-            st.session_state.field_specs[page_key][st.session_state.selected_field]['w'] = round(new_w, 2)
-            st.session_state.field_specs[page_key][st.session_state.selected_field]['h'] = round(new_h, 2)
+            # UPDATE field specs immediately
+            st.session_state.field_specs[page_key][st.session_state.selected_field]['x'] = new_x
+            st.session_state.field_specs[page_key][st.session_state.selected_field]['y'] = new_y
+            st.session_state.field_specs[page_key][st.session_state.selected_field]['w'] = new_w
+            st.session_state.field_specs[page_key][st.session_state.selected_field]['h'] = new_h
             
-            # Show current values
-            st.success(f"📍 **{st.session_state.selected_field}**: X={new_x:.2f}\", Y={new_y:.2f}\", W={new_w:.2f}\", H={new_h:.2f}\"")
+            st.success(f"📍 Position updated: X={new_x:.2f}\", Y={new_y:.2f}\", W={new_w:.2f}\", H={new_h:.2f}\"")
     
     with col2:
         st.header("🎛️ Controls")
         
-        # Coordinate display
         if st.button("📊 Show All Coordinates", use_container_width=True):
             st.subheader("Current Coordinates")
             for page_key, fields in st.session_state.field_specs.items():
@@ -696,34 +779,30 @@ def main():
         
         st.markdown("---")
         
-        # FIXED: Form processing with ROBUST error handling
         st.subheader("📄 Process Forms")
         
-        # SAFE cases count
         st.write(f"**📊 Cases to process:** {cases_count}")
         
         if cases_count == 0:
-            st.warning("No valid cases found in cases_data.json")
-            st.info("💡 Make sure your cases_data.json file contains a valid JSON array of case objects.")
+            st.warning("No valid cases found")
         else:
-            # Show sample case structure for verification - FIXED WITH SAFETY CHECKS
+            # Preview first case
             if st.button("👁️ Preview First Case", use_container_width=True):
                 try:
-                    if (isinstance(st.session_state.cases_data, list) and 
-                        len(st.session_state.cases_data) > 0):
+                    if st.session_state.cases_data and len(st.session_state.cases_data) > 0:
                         first_case = st.session_state.cases_data[0]
                         if isinstance(first_case, dict):
                             st.json(first_case)
                         else:
-                            st.error(f"First case is not a valid object. Type: {type(first_case).__name__}")
+                            st.error(f"First case is invalid: {type(first_case).__name__}")
                     else:
-                        st.warning("No cases available to preview")
+                        st.warning("No cases available")
                 except Exception as e:
-                    st.error(f"Error previewing case: {str(e)}")
+                    st.error(f"Error previewing: {str(e)}")
             
+            # CRITICAL FIX: Generate SEPARATE PDFs for EACH case
             if st.button("🚀 Fill All Forms", type="primary", use_container_width=True):
                 
-                # FIXED: Proper progress tracking with correct placeholder methods
                 progress_bar = st.progress(0)
                 status_container = st.container()
                 
@@ -731,31 +810,33 @@ def main():
                 failed_cases = []
                 
                 try:
+                    # Process EACH case individually
                     for i, case in enumerate(st.session_state.cases_data):
-                        # VALIDATE each case is a dictionary
                         if not isinstance(case, dict):
-                            failed_cases.append(f"Case {i+1}: Invalid type ({type(case).__name__})")
+                            failed_cases.append(f"Case {i+1}: Invalid type")
                             continue
                         
-                        # FIXED: Use container with text() method
+                        case_id = case.get('case_id', f'case_{i+1:03d}')
+                        
                         with status_container:
-                            case_id = case.get('case_id', f'Case {i+1}')
-                            st.text(f"Processing case {i+1}/{cases_count}: {case_id}")
+                            st.text(f"Processing {i+1}/{cases_count}: {case_id}")
                         
                         progress_bar.progress((i + 1) / cases_count)
                         
-                        # Process the case
                         try:
+                            # Create filled PDF for THIS specific case
                             filled_pdf = create_filled_pdf(case, st.session_state.pdf_bytes, st.session_state.font_bytes)
                             
                             if filled_pdf:
-                                filled_pdfs[f"{case_id}_filled.pdf"] = filled_pdf
+                                # Store with UNIQUE filename for EACH case
+                                filename = f"{case_id}_filled.pdf"
+                                filled_pdfs[filename] = filled_pdf
                             else:
-                                failed_cases.append(f"{case_id}: PDF creation failed")
+                                failed_cases.append(f"{case_id}: PDF creation returned None")
                         except Exception as e:
                             failed_cases.append(f"{case_id}: {str(e)}")
                     
-                    # Create ZIP file if we have any successful PDFs
+                    # Create ZIP with ALL filled PDFs
                     if filled_pdfs:
                         zip_buffer = BytesIO()
                         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
@@ -764,12 +845,11 @@ def main():
                         
                         zip_buffer.seek(0)
                         
-                        # FIXED: Clear status and show success
                         status_container.empty()
                         progress_bar.empty()
                         
                         if failed_cases:
-                            st.warning(f"⚠️ Processed {len(filled_pdfs)} of {cases_count} forms successfully")
+                            st.warning(f"⚠️ Processed {len(filled_pdfs)} of {cases_count} forms")
                             with st.expander("Failed Cases"):
                                 for error in failed_cases:
                                     st.error(error)
@@ -777,13 +857,19 @@ def main():
                             st.success(f"🎉 Successfully processed all {len(filled_pdfs)} forms!")
                             st.balloons()
                         
+                        # Download button for ZIP containing ALL PDFs
                         st.download_button(
                             label=f"📥 Download {len(filled_pdfs)} Filled Forms (ZIP)",
                             data=zip_buffer.getvalue(),
-                            file_name="filled_medical_forms.zip",
+                            file_name=f"medical_forms_{len(filled_pdfs)}_cases.zip",
                             mime="application/zip",
                             use_container_width=True
                         )
+                        
+                        # Show what's in the ZIP
+                        with st.expander("📦 ZIP Contents"):
+                            for filename in filled_pdfs.keys():
+                                st.text(f"✓ {filename}")
                     else:
                         status_container.empty()
                         progress_bar.empty()
@@ -796,28 +882,23 @@ def main():
                 except Exception as e:
                     status_container.empty()
                     progress_bar.empty()
-                    st.error(f"❌ Critical error during processing: {str(e)}")
+                    st.error(f"❌ Critical error: {str(e)}")
                     st.exception(e)
         
-        # Instructions
         st.markdown("---")
-        st.subheader("📋 How to Use")
+        st.subheader("📋 Instructions")
         st.markdown("""
-        **🎯 Positioning:**
+        **Field Positioning:**
         1. Select page and field
-        2. Drag rectangles on PDF
-        3. Fine-tune with sliders
-        4. Green = selected field
+        2. Use sliders to adjust position
+        3. Changes apply immediately
         
-        **📄 Processing:**
-        1. Position all fields correctly
-        2. Click "Fill All Forms"  
-        3. Download ZIP file
+        **Processing:**
+        1. Adjust fields if needed
+        2. Click "Fill All Forms"
+        3. Download ZIP with all PDFs
         
-        **💡 Tips:**
-        - Positions are saved automatically
-        - Switch pages without losing changes
-        - Data loads from input/cases_data.json
+        **Your JSON format is automatically handled!**
         """)
 
 if __name__ == "__main__":

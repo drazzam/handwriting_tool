@@ -1,0 +1,164 @@
+{
+  "cases": [
+    {
+      "Date": "2025-07-08",
+      "Age & Gender": "28 year old male",
+      "Main theme of the case": "Viral gastroenteritis mild dehydration",
+      "Case Summary": "24 hour watery diarrhea, cramps, afebrile; mild dehydration (dry mucosa). No travel/blood/antibiotics. Likely viral AGE. ORS regimen, early feeding, loperamide PRN if afebrile, education sheet. No labs now. Review 48 h; return if red flags",
+      "Self Reflection": "Did well: Correct dehydration class; simple, safe plan. Needs work: Orthostatics; dietary precision. Plan: Add orthostatic check; use AGE checklist",
+      "Signature of the MI": "Ahmed Yasser Elsayed Azzam",
+      "EPA tested": [
+        2,
+        6,
+        9,
+        12
+      ],
+      "Rubric": [
+        "Level C",
+        "Level C",
+        "Level C",
+        "Level C"
+      ],
+      "Strength points": [
+        "Hydration grading",
+        "ORS coaching",
+        "Clear notes",
+        "Return plan"
+      ],
+      "Points needing improvement": [
+        "Orthostatic vitals",
+        "Diet specifics",
+        "Weight charting",
+        "Phone followup"
+      ]
+    },
+    {
+      "Date": "2025-07-23",
+      "Age & Gender": "34 year old female",
+      "Main theme of the case": "Traveler’s diarrhea",
+      "Case Summary": "Returned from India; 2 day watery diarrhea, low fever, no blood. Started azithromycin single dose, ORS, bismuth; avoid loperamide with fever. Travel hygiene counseling. Stool tests only if >7 days or red flags. Review 48 72 h",
+      "Self Reflection": "Did well: Targeted therapy; prevention counseling. Needs work: Interaction checks; printed materials. Plan: Medication review; carry handouts",
+      "Signature of the MI": "Ahmed Yasser Elsayed Azzam",
+      "EPA tested": [
+        1,
+        3,
+        5,
+        11
+      ],
+      "Rubric": [
+        "Level C",
+        "Level C",
+        "Level C",
+        "Level C"
+      ],
+      "Strength points": [
+        "Travel history",
+        "Guideline therapy",
+        "Hygiene counseling",
+        "Risk framing"
+      ],
+      "Points needing improvement": [
+        "Exposure detail",
+        "Drug interactions",
+        "Vaccine discussion",
+        "Written leaflet"
+      ]
+    },
+    {
+      "Date": "2025-07-13",
+      "Age & Gender": "15 month old male",
+      "Main theme of the case": "Persistent diarrhea probable post infectious lactose intolerance",
+      "Case Summary": "10 day nonbloody diarrhea; loss of 0.4 kg weight; post infectious lactose intolerance suspected. Ordered stool pH/reducing substances, ova/parasites if risk. Trial lactose free diet, zinc 10 14 days; hydration plan. Growth follow up 1 2 weeks",
+      "Self Reflection": "Did well: Linked symptoms to growth; conservative testing. Needs work: Timing strategy; nutrition linkage. Plan: Growth charting; dietitian template",
+      "Signature of the MI": "Ahmed Yasser Elsayed Azzam",
+      "EPA tested": [
+        4,
+        10,
+        6,
+        12
+      ],
+      "Rubric": [
+        "Level C",
+        "Level C",
+        "Level C",
+        "Level C"
+      ],
+      "Strength points": [
+        "Targeted tests",
+        "Structured plan",
+        "Feeding advice",
+        "Scheduled review"
+      ],
+      "Points needing improvement": [
+        "Test timing",
+        "Dietician referral",
+        "Teach back",
+        "Growth tracker"
+      ]
+    },
+    {
+      "Date": "2025-08-05",
+      "Age & Gender": "22 year old male",
+      "Main theme of the case": "Bloody diarrhea / dysentery",
+      "Case Summary": "Acute diarrhea with fever 38.3 °C, blood/mucus, cramps; unsafe food exposure. Sent stool culture/OVA, FBC/CRP; avoided loperamide. Empiric azithro after specimens; ORS; red flag return. ED if orthostasis, severe pain, worsening",
+      "Self Reflection": "Did well: Recognized severity; avoided antimotility; timely tests. Needs work: Travel/antibiotic history; disposition clarity. Plan: Stool collection card; triage script",
+      "Signature of the MI": "Ahmed Yasser Elsayed Azzam",
+      "EPA tested": [
+        1,
+        4,
+        13,
+        9
+      ],
+      "Rubric": [
+        "Level C",
+        "Level C",
+        "Level C",
+        "Level C"
+      ],
+      "Strength points": [
+        "Alarm history",
+        "Appropriate workup",
+        "Escalation criteria",
+        "Detailed notes"
+      ],
+      "Points needing improvement": [
+        "Travel details",
+        "Specimen timing",
+        "Disposition clarity",
+        "Allergy record"
+      ]
+    },
+    {
+      "Date": "2025-07-22",
+      "Age & Gender": "68 year old female",
+      "Main theme of the case": "Suspected Clostridioides difficile infection (CDI)",
+      "Case Summary": "Recent antibiotics; watery diarrhea, cramping, low grade fever. Suspect CDI. Stop culprit antibiotic; order NAAT/toxin algorithm; start oral vancomycin if severe/confirmed. Contact precautions; hydration; review 24 48 h; assess recurrence risk",
+      "Self Reflection": "Did well: Early CDI suspicion; infection control; aligned testing. Needs work: Severity assessment; dosing clarity. Plan: Add severity calculator; CDI order set",
+      "Signature of the MI": "Ahmed Yasser Elsayed Azzam",
+      "EPA tested": [
+        4,
+        3,
+        14,
+        12
+      ],
+      "Rubric": [
+        "Level C",
+        "Level C",
+        "Level C",
+        "Level C"
+      ],
+      "Strength points": [
+        "CDI testing",
+        "Rational therapy",
+        "Isolation implemented",
+        "Result tracking"
+      ],
+      "Points needing improvement": [
+        "Severity scoring",
+        "Dose documentation",
+        "PPE compliance",
+        "Result turnaround"
+      ]
+    }
+  ]
+}

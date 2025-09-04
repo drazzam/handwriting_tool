@@ -490,8 +490,17 @@ def main():
         with col_field:
             page_key = f"page{current_page}"
             field_names = list(st.session_state.field_specs[page_key].keys())
-            selected_field = st.selectbox("🎯 Select Field", field_names, key="field_selector")
-            st.session_state.selected_field = selected_field
+            
+            # Ensure selected field is valid for current page
+            if (st.session_state.selected_field is None or 
+                st.session_state.selected_field not in field_names):
+                st.session_state.selected_field = field_names[0] if field_names else None
+            
+            if field_names:
+                selected_field = st.selectbox("🎯 Select Field", field_names, 
+                                            index=field_names.index(st.session_state.selected_field) if st.session_state.selected_field in field_names else 0,
+                                            key="field_selector")
+                st.session_state.selected_field = selected_field
         
         # Create and display interactive Plotly figure
         if current_page in st.session_state.pdf_images:

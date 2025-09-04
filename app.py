@@ -558,8 +558,6 @@ def main():
     with col2:
         st.header("🎛️ Controls")
         
-        # REMOVED: Quick Field Selection buttons (as requested)
-        
         # Coordinate display
         if st.button("📊 Show All Coordinates", use_container_width=True):
             st.subheader("Current Coordinates")
@@ -579,7 +577,7 @@ def main():
         
         st.markdown("---")
         
-        # FIXED: Form processing without AttributeError
+        # FIXED: Form processing with proper placeholder handling
         st.subheader("📄 Process Forms")
         
         cases_count = len(st.session_state.cases_data)
@@ -590,50 +588,58 @@ def main():
         else:
             if st.button("🚀 Fill All Forms", type="primary", use_container_width=True):
                 
-                # FIXED: Use proper progress tracking without AttributeError
+                # FIXED: Proper progress tracking with correct placeholder methods
                 progress_bar = st.progress(0)
-                status_placeholder = st.empty()
+                status_container = st.container()
                 
                 filled_pdfs = {}
                 
-                for i, case in enumerate(st.session_state.cases_data):
-                    # FIXED: Use placeholder instead of problematic text widget
-                    status_placeholder.write(f"Processing case {i+1}/{cases_count}: {case.get('case_id', f'Case {i+1}')}")
-                    progress_bar.progress((i + 1) / cases_count)
+                try:
+                    for i, case in enumerate(st.session_state.cases_data):
+                        # FIXED: Use container with text() method instead of write()
+                        with status_container:
+                            st.text(f"Processing case {i+1}/{cases_count}: {case.get('case_id', f'Case {i+1}')}")
+                        
+                        progress_bar.progress((i + 1) / cases_count)
+                        
+                        case_id = case.get('case_id', f'case_{i+1}')
+                        filled_pdf = create_filled_pdf(case, st.session_state.pdf_bytes, st.session_state.font_bytes)
+                        
+                        if filled_pdf:
+                            filled_pdfs[f"{case_id}_filled.pdf"] = filled_pdf
                     
-                    case_id = case.get('case_id', f'case_{i+1}')
-                    filled_pdf = create_filled_pdf(case, st.session_state.pdf_bytes, st.session_state.font_bytes)
-                    
-                    if filled_pdf:
-                        filled_pdfs[f"{case_id}_filled.pdf"] = filled_pdf
+                    # Create ZIP file
+                    if filled_pdfs:
+                        zip_buffer = BytesIO()
+                        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                            for filename, pdf_data in filled_pdfs.items():
+                                zip_file.writestr(filename, pdf_data)
+                        
+                        zip_buffer.seek(0)
+                        
+                        # FIXED: Clear status and show success
+                        status_container.empty()
+                        progress_bar.empty()
+                        
+                        st.success(f"🎉 Successfully processed {len(filled_pdfs)} forms!")
+                        st.balloons()
+                        
+                        st.download_button(
+                            label="📥 Download Filled Forms (ZIP)",
+                            data=zip_buffer.getvalue(),
+                            file_name="filled_medical_forms.zip",
+                            mime="application/zip",
+                            use_container_width=True
+                        )
+                    else:
+                        status_container.empty()
+                        progress_bar.empty()
+                        st.error("❌ No forms were successfully processed")
                 
-                # Create ZIP file
-                if filled_pdfs:
-                    zip_buffer = BytesIO()
-                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                        for filename, pdf_data in filled_pdfs.items():
-                            zip_file.writestr(filename, pdf_data)
-                    
-                    zip_buffer.seek(0)
-                    
-                    # FIXED: Clear status and show success
-                    status_placeholder.empty()
+                except Exception as e:
+                    status_container.empty()
                     progress_bar.empty()
-                    
-                    st.success(f"🎉 Successfully processed {len(filled_pdfs)} forms!")
-                    st.balloons()
-                    
-                    st.download_button(
-                        label="📥 Download Filled Forms (ZIP)",
-                        data=zip_buffer.getvalue(),
-                        file_name="filled_medical_forms.zip",
-                        mime="application/zip",
-                        use_container_width=True
-                    )
-                else:
-                    status_placeholder.empty()
-                    progress_bar.empty()
-                    st.error("❌ No forms were successfully processed")
+                    st.error(f"❌ Error during processing: {str(e)}")
         
         # Instructions
         st.markdown("---")

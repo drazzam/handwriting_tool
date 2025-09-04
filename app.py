@@ -580,12 +580,21 @@ def main():
         # FIXED: Form processing with proper placeholder handling
         st.subheader("📄 Process Forms")
         
-        cases_count = len(st.session_state.cases_data)
+        cases_count = len(st.session_state.cases_data) if st.session_state.cases_data else 0
         st.write(f"**📊 Cases to process:** {cases_count}")
         
         if cases_count == 0:
             st.warning("No cases found in cases_data.json")
+            st.info("💡 Make sure your cases_data.json file contains a valid JSON array of case objects.")
         else:
+            # Show sample case structure for verification
+            if st.button("👁️ Preview First Case", use_container_width=True):
+                if st.session_state.cases_data and len(st.session_state.cases_data) > 0:
+                    first_case = st.session_state.cases_data[0]
+                    st.json(first_case)
+                else:
+                    st.warning("No cases available to preview")
+            
             if st.button("🚀 Fill All Forms", type="primary", use_container_width=True):
                 
                 # FIXED: Proper progress tracking with correct placeholder methods

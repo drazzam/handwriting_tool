@@ -15,7 +15,6 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from PyPDF2 import PdfWriter, PdfReader
 import plotly.graph_objects as go
-from plotly import graph_objs as go
 import copy
 import warnings
 warnings.filterwarnings('ignore')
@@ -48,22 +47,22 @@ DEFAULT_SPECS = {
     },
     "page2": {
         # UPDATED PAGE 2 FONT SIZES AS SPECIFIED
-        "epa_row1": {"x": 0.6, "y": 1.8, "w": 1.8, "h": 0.35, "font": 32},  # 32pt
-        "epa_row2": {"x": 0.6, "y": 2.4, "w": 1.8, "h": 0.35, "font": 32},  # 32pt
-        "epa_row3": {"x": 0.6, "y": 3.0, "w": 1.8, "h": 0.35, "font": 32},  # 32pt
-        "epa_row4": {"x": 0.6, "y": 3.6, "w": 1.8, "h": 0.35, "font": 32},  # 32pt
-        "rubric_row1": {"x": 2.5, "y": 1.8, "w": 1.5, "h": 0.35, "font": 24},  # 24pt
-        "rubric_row2": {"x": 2.5, "y": 2.4, "w": 1.5, "h": 0.35, "font": 24},  # 24pt
-        "rubric_row3": {"x": 2.5, "y": 3.0, "w": 1.5, "h": 0.35, "font": 24},  # 24pt
-        "rubric_row4": {"x": 2.5, "y": 3.6, "w": 1.5, "h": 0.35, "font": 24},  # 24pt
-        "strength_row1": {"x": 4.1, "y": 1.8, "w": 1.8, "h": 0.35, "font": 16},  # 16pt
-        "strength_row2": {"x": 4.1, "y": 2.4, "w": 1.8, "h": 0.35, "font": 16},  # 16pt
-        "strength_row3": {"x": 4.1, "y": 3.0, "w": 1.8, "h": 0.35, "font": 16},  # 16pt
-        "strength_row4": {"x": 4.1, "y": 3.6, "w": 1.8, "h": 0.35, "font": 16},  # 16pt
-        "improve_row1": {"x": 6.0, "y": 1.8, "w": 1.8, "h": 0.35, "font": 16},  # 16pt
-        "improve_row2": {"x": 6.0, "y": 2.4, "w": 1.8, "h": 0.35, "font": 16},  # 16pt
-        "improve_row3": {"x": 6.0, "y": 3.0, "w": 1.8, "h": 0.35, "font": 16},  # 16pt
-        "improve_row4": {"x": 6.0, "y": 3.6, "w": 1.8, "h": 0.35, "font": 16},  # 16pt
+        "epa_row1": {"x": 0.6, "y": 1.8, "w": 1.8, "h": 0.35, "font": 32},
+        "epa_row2": {"x": 0.6, "y": 2.4, "w": 1.8, "h": 0.35, "font": 32},
+        "epa_row3": {"x": 0.6, "y": 3.0, "w": 1.8, "h": 0.35, "font": 32},
+        "epa_row4": {"x": 0.6, "y": 3.6, "w": 1.8, "h": 0.35, "font": 32},
+        "rubric_row1": {"x": 2.5, "y": 1.8, "w": 1.5, "h": 0.35, "font": 24},
+        "rubric_row2": {"x": 2.5, "y": 2.4, "w": 1.5, "h": 0.35, "font": 24},
+        "rubric_row3": {"x": 2.5, "y": 3.0, "w": 1.5, "h": 0.35, "font": 24},
+        "rubric_row4": {"x": 2.5, "y": 3.6, "w": 1.5, "h": 0.35, "font": 24},
+        "strength_row1": {"x": 4.1, "y": 1.8, "w": 1.8, "h": 0.35, "font": 16},
+        "strength_row2": {"x": 4.1, "y": 2.4, "w": 1.8, "h": 0.35, "font": 16},
+        "strength_row3": {"x": 4.1, "y": 3.0, "w": 1.8, "h": 0.35, "font": 16},
+        "strength_row4": {"x": 4.1, "y": 3.6, "w": 1.8, "h": 0.35, "font": 16},
+        "improve_row1": {"x": 6.0, "y": 1.8, "w": 1.8, "h": 0.35, "font": 16},
+        "improve_row2": {"x": 6.0, "y": 2.4, "w": 1.8, "h": 0.35, "font": 16},
+        "improve_row3": {"x": 6.0, "y": 3.0, "w": 1.8, "h": 0.35, "font": 16},
+        "improve_row4": {"x": 6.0, "y": 3.6, "w": 1.8, "h": 0.35, "font": 16}
     }
 }
 
@@ -82,14 +81,6 @@ def initialize_session_state():
     if 'has_unsaved_changes' not in st.session_state:
         st.session_state.has_unsaved_changes = {"page1": False, "page2": False}
     
-    # Track shape dragging
-    if 'shapes_modified' not in st.session_state:
-        st.session_state.shapes_modified = False
-    
-    # Track field order for shape mapping
-    if 'field_order' not in st.session_state:
-        st.session_state.field_order = {}
-    
     # Initialize other session state variables
     for key, default in [
         ('pdf_images', {}),
@@ -101,7 +92,7 @@ def initialize_session_state():
         ('font_bytes', None),
         ('loading_error', None),
         ('show_success_message', None),
-        ('last_plotly_config', None)
+        ('input_method', 'sliders')  # Track which input method is being used
     ]:
         if key not in st.session_state:
             st.session_state[key] = default
@@ -147,62 +138,6 @@ def reset_all_positions():
 
 def inches_to_pixels(inches, dpi=150):
     return int(inches * dpi)
-
-def pixels_to_inches(pixels, dpi=150):
-    return pixels / dpi
-
-def extract_shape_positions(relayout_data, page_num, img_height):
-    """Extract positions from Plotly relayout data after shape dragging"""
-    if not relayout_data:
-        return None
-    
-    # Look for shape modifications in relayout data
-    modified_positions = {}
-    page_key = f"page{page_num}"
-    field_names = list(st.session_state.working_positions[page_key].keys())
-    
-    # Check each possible shape modification key
-    for i, field_name in enumerate(field_names):
-        # Plotly uses keys like 'shapes[0].x0', 'shapes[0].y0', etc.
-        shape_key_prefix = f'shapes[{i}]'
-        
-        x0_key = f'{shape_key_prefix}.x0'
-        y0_key = f'{shape_key_prefix}.y0'
-        x1_key = f'{shape_key_prefix}.x1'
-        y1_key = f'{shape_key_prefix}.y1'
-        
-        if any(key in relayout_data for key in [x0_key, y0_key, x1_key, y1_key]):
-            # Get current positions as defaults
-            current = st.session_state.working_positions[page_key][field_name]
-            
-            # Extract new positions if available
-            if x0_key in relayout_data and x1_key in relayout_data:
-                x0_px = relayout_data[x0_key]
-                x1_px = relayout_data[x1_key]
-                new_x = pixels_to_inches(x0_px)
-                new_w = pixels_to_inches(x1_px - x0_px)
-            else:
-                new_x = current['x']
-                new_w = current['w']
-            
-            if y0_key in relayout_data and y1_key in relayout_data:
-                y0_px = relayout_data[y0_key]
-                y1_px = relayout_data[y1_key]
-                # Convert from bottom-origin to top-origin
-                new_y = pixels_to_inches(img_height - y1_px)
-                new_h = pixels_to_inches(y1_px - y0_px)
-            else:
-                new_y = current['y']
-                new_h = current['h']
-            
-            modified_positions[field_name] = {
-                'x': new_x,
-                'y': new_y,
-                'w': new_w,
-                'h': new_h
-            }
-    
-    return modified_positions if modified_positions else None
 
 @st.cache_data
 def load_pdf_as_images(pdf_bytes):
@@ -387,8 +322,8 @@ def load_input_data():
     st.session_state.loading_error = None
     return True
 
-def create_interactive_plotly_figure(page_num):
-    """Create DRAGGABLE interactive Plotly figure"""
+def create_visual_preview(page_num):
+    """Create visual preview with field positions"""
     if page_num not in st.session_state.pdf_images:
         return None
     
@@ -402,6 +337,7 @@ def create_interactive_plotly_figure(page_num):
     
     fig = go.Figure()
     
+    # Add PDF image as background
     fig.add_layout_image(
         dict(
             source=f"data:image/png;base64,{img_base64}",
@@ -418,11 +354,7 @@ def create_interactive_plotly_figure(page_num):
     colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan',
               'magenta', 'yellow', 'lime', 'navy', 'teal', 'silver', 'maroon', 'fuchsia', 'aqua', 'black']
     
-    # Store field order for shape mapping
-    field_names = list(st.session_state.working_positions[page_key].keys())
-    st.session_state.field_order[page_key] = field_names
-    
-    # Use WORKING positions for display
+    # Draw rectangles for each field
     for i, (field_name, spec) in enumerate(st.session_state.working_positions[page_key].items()):
         x_px = inches_to_pixels(spec['x'])
         y_px = img_height - inches_to_pixels(spec['y'] + spec['h'])
@@ -431,6 +363,7 @@ def create_interactive_plotly_figure(page_num):
         
         color = colors[i % len(colors)]
         
+        # Highlight selected field
         if field_name == st.session_state.selected_field:
             color = 'lime'
             opacity = 0.5
@@ -439,7 +372,7 @@ def create_interactive_plotly_figure(page_num):
             opacity = 0.3
             line_width = 2
         
-        # DRAGGABLE rectangles (editable=True)
+        # Add rectangle shape
         fig.add_shape(
             type="rect",
             x0=x_px, y0=y_px,
@@ -447,12 +380,10 @@ def create_interactive_plotly_figure(page_num):
             line=dict(color=color, width=line_width),
             fillcolor=color,
             opacity=opacity,
-            editable=True,  # DRAGGABLE!
-            name=field_name,
             layer="above"
         )
         
-        # Field label
+        # Add field label
         fig.add_annotation(
             x=x_px + w_px/2,
             y=y_px + h_px/2,
@@ -468,8 +399,8 @@ def create_interactive_plotly_figure(page_num):
     
     fig.update_layout(
         title=dict(
-            text=f"📄 Page {page_num} - {status}<br>" +
-                 f"<sub>🎯 Drag boxes OR use sliders to position fields</sub>",
+            text=f"📄 Page {page_num} Preview - {status}<br>" +
+                 f"<sub>Use controls below to position fields</sub>",
             x=0.5,
             font=dict(size=16)
         ),
@@ -478,7 +409,7 @@ def create_interactive_plotly_figure(page_num):
             showgrid=False,
             zeroline=False,
             showticklabels=False,
-            fixedrange=False
+            fixedrange=True
         ),
         yaxis=dict(
             range=[0, img_height],
@@ -487,18 +418,14 @@ def create_interactive_plotly_figure(page_num):
             showticklabels=False,
             scaleanchor="x",
             scaleratio=1,
-            fixedrange=False
+            fixedrange=True
         ),
         width=900,
         height=1100,
         margin=dict(l=20, r=20, t=80, b=20),
         showlegend=False,
-        dragmode='pan',
-        modebar=dict(remove=['toImage', 'select2d', 'lasso2d'])
+        dragmode=False
     )
-    
-    # Enable shape editing
-    fig.update_shapes(dict(editable=True))
     
     return fig
 
@@ -545,12 +472,11 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
             y_pts = (page_height/72 - spec['y'] - spec['h']/2) * 72
             w_pts = spec['w'] * 72
             
-            # Use the font size from spec (includes updated Page 2 sizes)
             font_size = spec['font']
             c.setFont(font_name, font_size)
             c.setFillColor(font_color)
             
-            # For larger font sizes, adjust line height
+            # Adjust line height for larger fonts
             if font_size > 20:
                 line_height = font_size * 1.1
             else:
@@ -586,7 +512,7 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
         # Use PERMANENT saved positions
         saved_specs = st.session_state.permanent_saved_positions
         
-        # PAGE 1 (font sizes unchanged as requested)
+        # PAGE 1
         page1_specs = saved_specs['page1']
         
         draw_text(case_data.get('date', ''), page1_specs['date'], page_height)
@@ -607,7 +533,7 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
         
         draw_text(case_data.get('signature_mi', ''), page1_specs['signature_mi'], page_height)
         
-        # PAGE 2 (with updated font sizes)
+        # PAGE 2
         c.showPage()
         page2_specs = saved_specs['page2']
         epa_data = case_data.get('epa_assessment', {})
@@ -663,7 +589,7 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
         return None
 
 def main():
-    """Main application with bidirectional drag-and-slider positioning"""
+    """Main application with proper positioning controls"""
     
     initialize_session_state()
     
@@ -672,7 +598,7 @@ def main():
             load_input_data()
     
     st.title("📋 PDF Medical Form Filler")
-    st.markdown("*Interactive positioning: Drag boxes or use sliders*")
+    st.markdown("*Precision positioning with sliders and number inputs*")
     
     # Error handling
     if st.session_state.loading_error:
@@ -766,15 +692,12 @@ def main():
     col1, col2 = st.columns([3, 1])
     
     with col1:
-        st.header("🎯 Interactive Field Positioning")
+        st.header("🎯 Field Positioning")
         
         # Success message
         if st.session_state.show_success_message:
             st.success(f"✅ {st.session_state.show_success_message}")
             st.session_state.show_success_message = None
-        
-        # Instructions
-        st.info("💡 **Two ways to position:** Drag the boxes directly on the image OR use the sliders below. Both sync automatically!")
         
         # Page selection and save
         col_page, col_field, col_save = st.columns([1, 2, 1])
@@ -814,19 +737,14 @@ def main():
                 save_page_positions(page_key)
                 st.rerun()
         
-        # Interactive Plotly figure with draggable shapes
+        # Visual preview
         if current_page in st.session_state.pdf_images:
-            fig = create_interactive_plotly_figure(current_page)
+            fig = create_visual_preview(current_page)
             if fig:
-                # Render the Plotly chart
-                st.plotly_chart(
-                    fig, 
-                    use_container_width=True, 
-                    key=f"plotly_{current_page}"
-                )
+                st.plotly_chart(fig, use_container_width=True, key=f"preview_{current_page}")
         
-        # Position Controls (Sliders)
-        st.subheader(f"⚙️ Fine-tune '{st.session_state.selected_field}' Position")
+        # Position Controls
+        st.subheader(f"⚙️ Position '{st.session_state.selected_field}'")
         
         if st.session_state.selected_field:
             page_key = f"page{current_page}"
@@ -834,80 +752,177 @@ def main():
             spec = st.session_state.working_positions[page_key][field_name]
             
             # Display font size
-            st.markdown(f"**📝 Font Size:** {spec['font']}pt")
+            st.info(f"📝 **Font Size:** {spec['font']}pt (fixed per field type)")
             
-            # Position sliders
-            col_x, col_y = st.columns(2)
-            with col_x:
-                new_x = st.slider(
-                    "↔️ X Position (inches)",
-                    0.0, 8.5,
-                    value=float(spec['x']),
-                    step=0.01,
-                    format="%.2f",
-                    key=f"x_{page_key}_{field_name}",
-                    help="Horizontal position from left"
-                )
-                if new_x != spec['x']:
-                    update_working_position(page_key, field_name, 'x', new_x)
+            # Choose input method
+            input_tabs = st.tabs(["🎚️ Sliders", "🔢 Number Input"])
             
-            with col_y:
-                new_y = st.slider(
-                    "↕️ Y Position (inches)",
-                    0.0, 11.0,
-                    value=float(spec['y']),
-                    step=0.01,
-                    format="%.2f",
-                    key=f"y_{page_key}_{field_name}",
-                    help="Vertical position from top"
-                )
-                if new_y != spec['y']:
-                    update_working_position(page_key, field_name, 'y', new_y)
+            with input_tabs[0]:
+                # SLIDER CONTROLS
+                st.markdown("**Use sliders for visual adjustment:**")
+                
+                col_x, col_y = st.columns(2)
+                with col_x:
+                    new_x = st.slider(
+                        "↔️ X Position (inches)",
+                        0.0, 8.5,
+                        value=float(spec['x']),
+                        step=0.01,
+                        format="%.2f",
+                        key=f"slider_x_{page_key}_{field_name}"
+                    )
+                    if new_x != spec['x']:
+                        update_working_position(page_key, field_name, 'x', new_x)
+                
+                with col_y:
+                    new_y = st.slider(
+                        "↕️ Y Position (inches)",
+                        0.0, 11.0,
+                        value=float(spec['y']),
+                        step=0.01,
+                        format="%.2f",
+                        key=f"slider_y_{page_key}_{field_name}"
+                    )
+                    if new_y != spec['y']:
+                        update_working_position(page_key, field_name, 'y', new_y)
+                
+                col_w, col_h = st.columns(2)
+                with col_w:
+                    new_w = st.slider(
+                        "📐 Width (inches)",
+                        0.1, 8.0,
+                        value=float(spec['w']),
+                        step=0.01,
+                        format="%.2f",
+                        key=f"slider_w_{page_key}_{field_name}"
+                    )
+                    if new_w != spec['w']:
+                        update_working_position(page_key, field_name, 'w', new_w)
+                
+                with col_h:
+                    new_h = st.slider(
+                        "📏 Height (inches)",
+                        0.1, 3.0,
+                        value=float(spec['h']),
+                        step=0.01,
+                        format="%.2f",
+                        key=f"slider_h_{page_key}_{field_name}"
+                    )
+                    if new_h != spec['h']:
+                        update_working_position(page_key, field_name, 'h', new_h)
             
-            col_w, col_h = st.columns(2)
-            with col_w:
-                new_w = st.slider(
-                    "📐 Width (inches)",
-                    0.1, 8.0,
-                    value=float(spec['w']),
-                    step=0.01,
-                    format="%.2f",
-                    key=f"w_{page_key}_{field_name}",
-                    help="Field width"
-                )
-                if new_w != spec['w']:
-                    update_working_position(page_key, field_name, 'w', new_w)
+            with input_tabs[1]:
+                # NUMBER INPUT CONTROLS
+                st.markdown("**Enter exact values (inches):**")
+                
+                col_x_num, col_y_num = st.columns(2)
+                with col_x_num:
+                    num_x = st.number_input(
+                        "X Position",
+                        min_value=0.0,
+                        max_value=8.5,
+                        value=float(spec['x']),
+                        step=0.01,
+                        format="%.2f",
+                        key=f"num_x_{page_key}_{field_name}"
+                    )
+                    if num_x != spec['x']:
+                        update_working_position(page_key, field_name, 'x', num_x)
+                        st.rerun()
+                
+                with col_y_num:
+                    num_y = st.number_input(
+                        "Y Position",
+                        min_value=0.0,
+                        max_value=11.0,
+                        value=float(spec['y']),
+                        step=0.01,
+                        format="%.2f",
+                        key=f"num_y_{page_key}_{field_name}"
+                    )
+                    if num_y != spec['y']:
+                        update_working_position(page_key, field_name, 'y', num_y)
+                        st.rerun()
+                
+                col_w_num, col_h_num = st.columns(2)
+                with col_w_num:
+                    num_w = st.number_input(
+                        "Width",
+                        min_value=0.1,
+                        max_value=8.0,
+                        value=float(spec['w']),
+                        step=0.01,
+                        format="%.2f",
+                        key=f"num_w_{page_key}_{field_name}"
+                    )
+                    if num_w != spec['w']:
+                        update_working_position(page_key, field_name, 'w', num_w)
+                        st.rerun()
+                
+                with col_h_num:
+                    num_h = st.number_input(
+                        "Height",
+                        min_value=0.1,
+                        max_value=3.0,
+                        value=float(spec['h']),
+                        step=0.01,
+                        format="%.2f",
+                        key=f"num_h_{page_key}_{field_name}"
+                    )
+                    if num_h != spec['h']:
+                        update_working_position(page_key, field_name, 'h', num_h)
+                        st.rerun()
             
-            with col_h:
-                new_h = st.slider(
-                    "📏 Height (inches)",
-                    0.1, 3.0,
-                    value=float(spec['h']),
-                    step=0.01,
-                    format="%.2f",
-                    key=f"h_{page_key}_{field_name}",
-                    help="Field height"
-                )
-                if new_h != spec['h']:
-                    update_working_position(page_key, field_name, 'h', new_h)
-            
-            # Update button to sync dragged positions to sliders
-            if st.button("🔄 Sync Dragged Positions", use_container_width=True, 
-                        help="Click after dragging boxes to update slider values"):
-                st.rerun()
-            
-            # Status
+            # Current position display
+            st.markdown("---")
             if st.session_state.has_unsaved_changes[page_key]:
-                st.warning(f"⚠️ Position: X={new_x:.2f}\", Y={new_y:.2f}\", W={new_w:.2f}\", H={new_h:.2f}\" (UNSAVED)")
+                st.warning(f"⚠️ **Current Position (UNSAVED):** X={spec['x']:.2f}\", Y={spec['y']:.2f}\", W={spec['w']:.2f}\", H={spec['h']:.2f}\"")
             else:
-                st.success(f"✅ Saved: X={new_x:.2f}\", Y={new_y:.2f}\", W={new_w:.2f}\", H={new_h:.2f}\"")
+                st.success(f"✅ **Saved Position:** X={spec['x']:.2f}\", Y={spec['y']:.2f}\", W={spec['w']:.2f}\", H={spec['h']:.2f}\"")
     
     with col2:
         st.header("🎛️ Tools")
         
+        # Quick position presets
+        st.subheader("Quick Position")
+        
+        if st.session_state.selected_field:
+            page_key = f"page{current_page}"
+            field_name = st.session_state.selected_field
+            
+            col_preset1, col_preset2 = st.columns(2)
+            with col_preset1:
+                if st.button("↖️ Top-Left", use_container_width=True):
+                    update_working_position(page_key, field_name, 'x', 0.5)
+                    update_working_position(page_key, field_name, 'y', 0.5)
+                    st.rerun()
+                
+                if st.button("↙️ Bottom-Left", use_container_width=True):
+                    update_working_position(page_key, field_name, 'x', 0.5)
+                    update_working_position(page_key, field_name, 'y', 9.5)
+                    st.rerun()
+            
+            with col_preset2:
+                if st.button("↗️ Top-Right", use_container_width=True):
+                    update_working_position(page_key, field_name, 'x', 6.0)
+                    update_working_position(page_key, field_name, 'y', 0.5)
+                    st.rerun()
+                
+                if st.button("↘️ Bottom-Right", use_container_width=True):
+                    update_working_position(page_key, field_name, 'x', 6.0)
+                    update_working_position(page_key, field_name, 'y', 9.5)
+                    st.rerun()
+            
+            if st.button("⬛ Center", use_container_width=True):
+                update_working_position(page_key, field_name, 'x', 3.5)
+                update_working_position(page_key, field_name, 'y', 5.5)
+                st.rerun()
+        
+        st.markdown("---")
+        
         # Coordinate display
         if st.button("📋 Show All Positions", use_container_width=True):
-            st.subheader("Current Positions")
+            st.subheader("Saved Positions")
             for pk in ["page1", "page2"]:
                 st.write(f"**{pk.upper()}:**")
                 data = []
@@ -1013,15 +1028,21 @@ def main():
         # Help
         st.subheader("❓ Help")
         st.markdown("""
-        **Positioning:**
-        - 🖱️ Drag boxes on image
-        - 🎚️ OR use sliders
-        - 🔄 Click Sync button
-        - 💾 Save the page
+        **Positioning Methods:**
         
-        **Generate:**
-        - Save all changes
-        - Click Generate PDFs
+        1. **🎚️ Sliders** - Visual adjustment
+        2. **🔢 Numbers** - Exact values
+        3. **⚡ Quick Presets** - Common positions
+        
+        **Workflow:**
+        1. Select field to position
+        2. Adjust using sliders OR numbers
+        3. Preview updates automatically
+        4. 💾 **SAVE the page**
+        5. Generate PDFs when ready
+        
+        **Note:** Preview shows live changes.
+        PDFs use only saved positions.
         """)
 
 if __name__ == "__main__":

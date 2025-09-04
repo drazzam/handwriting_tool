@@ -100,6 +100,18 @@ def load_pdf_as_images(pdf_bytes):
         st.error(f"Error converting PDF to images: {str(e)}")
         return {}
 
+def validate_case_data(case_data):
+    """Validate that case data is a dictionary with expected structure"""
+    if not isinstance(case_data, dict):
+        return False, "Case data must be a dictionary/object"
+    
+    # Check for at least some expected fields
+    expected_fields = ['case_id', 'date', 'age', 'gender', 'main_theme', 'case_summary']
+    if not any(field in case_data for field in expected_fields):
+        return False, f"Case data missing expected fields. Expected at least one of: {', '.join(expected_fields)}"
+    
+    return True, "Valid"
+
 def load_input_data():
     """Load all required data from the input folder automatically"""
     
@@ -124,18 +136,67 @@ def load_input_data():
         except Exception as e:
             errors.append(f"• Error loading {PDF_FILE}: {str(e)}")
     
-    # Load cases data from cases_data.json
+    # Load cases data from cases_data.json with ROBUST ERROR HANDLING
     cases_path = os.path.join(INPUT_FOLDER, CASES_FILE)
     if not os.path.exists(cases_path):
         errors.append(f"• Missing: {CASES_FILE}")
     else:
         try:
             with open(cases_path, 'r', encoding='utf-8') as f:
-                st.session_state.cases_data = json.load(f)
-            if not st.session_state.cases_data:
-                errors.append(f"• Empty or invalid: {CASES_FILE}")
+                loaded_data = json.load(f)
+            
+            # CRITICAL FIX: Validate the loaded data structure
+            if loaded_data is None:
+                errors.append(f"• {CASES_FILE} is empty or null")
+                st.session_state.cases_data = []
+            elif isinstance(loaded_data, str):
+                # Handle case where JSON might be double-encoded
+                try:
+                    loaded_data = json.loads(loaded_data)
+                except:
+                    errors.append(f"• {CASES_FILE} contains a string instead of JSON array")
+                    st.session_state.cases_data = []
+            
+            # Ensure loaded_data is a list
+            if isinstance(loaded_data, list):
+                # Validate each case in the list
+                valid_cases = []
+                for i, case in enumerate(loaded_data):
+                    if isinstance(case, dict):
+                        valid_cases.append(case)
+                    elif isinstance(case, str):
+                        # Try to parse string as JSON
+                        try:
+                            parsed_case = json.loads(case)
+                            if isinstance(parsed_case, dict):
+                                valid_cases.append(parsed_case)
+                            else:
+                                errors.append(f"• Case {i+1} is not a valid object")
+                        except:
+                            errors.append(f"• Case {i+1} is a string but not valid JSON")
+                    else:
+                        errors.append(f"• Case {i+1} has invalid type: {type(case).__name__}")
+                
+                st.session_state.cases_data = valid_cases
+                
+                if len(valid_cases) < len(loaded_data):
+                    errors.append(f"• Only {len(valid_cases)} of {len(loaded_data)} cases are valid")
+                
+                if not valid_cases:
+                    errors.append(f"• No valid cases found in {CASES_FILE}")
+            elif isinstance(loaded_data, dict):
+                # Single case wrapped in object - convert to list
+                st.session_state.cases_data = [loaded_data]
+            else:
+                errors.append(f"• {CASES_FILE} must contain a JSON array, got {type(loaded_data).__name__}")
+                st.session_state.cases_data = []
+                
+        except json.JSONDecodeError as e:
+            errors.append(f"• Invalid JSON in {CASES_FILE}: {str(e)}")
+            st.session_state.cases_data = []
         except Exception as e:
             errors.append(f"• Error loading {CASES_FILE}: {str(e)}")
+            st.session_state.cases_data = []
     
     # Load font (optional)
     font_path = os.path.join(INPUT_FOLDER, FONT_FILE)
@@ -279,8 +340,13 @@ def create_interactive_plotly_figure(page_num):
     return fig
 
 def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
-    """Create filled PDF for a single case"""
+    """Create filled PDF for a single case with ROBUST ERROR HANDLING"""
     try:
+        # CRITICAL FIX: Validate case_data is a dictionary
+        if not isinstance(case_data, dict):
+            st.error(f"Invalid case data type: {type(case_data).__name__}. Expected dictionary.")
+            return None
+            
         overlay_buffer = BytesIO()
         
         # Get original PDF dimensions
@@ -361,6 +427,7 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
         # Fill Page 1 - INCLUDING SIGNATURE
         page1 = st.session_state.field_specs['page1']
         
+        # SAFE GET with defaults to handle missing fields
         draw_text(case_data.get('date', ''), page1['date'], page_height)
         
         age_gender = f"{case_data.get('age', '')} {case_data.get('gender', '')}".strip()
@@ -369,9 +436,11 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
         draw_text(case_data.get('main_theme', ''), page1['main_theme'], page_height)
         draw_text(case_data.get('case_summary', ''), page1['case_summary'], page_height)
         
+        # Handle self_reflection - check if it exists and is a dict
         reflection = case_data.get('self_reflection', {})
-        draw_text(reflection.get('what_did_right', ''), page1['self_reflection_upper'], page_height)
-        draw_text(reflection.get('needs_development', ''), page1['self_reflection_lower'], page_height)
+        if isinstance(reflection, dict):
+            draw_text(reflection.get('what_did_right', ''), page1['self_reflection_upper'], page_height)
+            draw_text(reflection.get('needs_development', ''), page1['self_reflection_lower'], page_height)
         
         # SIGNATURE FIELD - FIXED
         draw_text(case_data.get('signature_mi', ''), page1['signature_mi'], page_height)
@@ -379,24 +448,32 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
         # Page 2
         c.showPage()
         page2 = st.session_state.field_specs['page2']
+        
+        # Handle EPA assessment - check if it exists and is a dict
         epa_data = case_data.get('epa_assessment', {})
-        
-        # Fill EPA table
-        epas = epa_data.get('epa_tested', ['EPA 2', 'EPA 6', 'EPA 9', 'EPA 12'])[:4]
-        rubrics = epa_data.get('rubric_levels', ['Level C'] * 4)[:4]
-        strengths = epa_data.get('strength_points', ['Good work'] * 4)[:4]
-        improvements = epa_data.get('points_needing_improvement', ['Keep practicing'] * 4)[:4]
-        
-        for i in range(4):
-            row = i + 1
-            if i < len(epas):
-                draw_text(epas[i], page2[f'epa_row{row}'], page_height)
-            if i < len(rubrics):
-                draw_text(rubrics[i], page2[f'rubric_row{row}'], page_height)
-            if i < len(strengths):
-                draw_text(strengths[i], page2[f'strength_row{row}'], page_height)
-            if i < len(improvements):
-                draw_text(improvements[i], page2[f'improve_row{row}'], page_height)
+        if isinstance(epa_data, dict):
+            # Fill EPA table with safe defaults
+            epas = epa_data.get('epa_tested', ['EPA 2', 'EPA 6', 'EPA 9', 'EPA 12'])
+            rubrics = epa_data.get('rubric_levels', ['Level C'] * 4)
+            strengths = epa_data.get('strength_points', ['Good work'] * 4)
+            improvements = epa_data.get('points_needing_improvement', ['Keep practicing'] * 4)
+            
+            # Ensure lists are lists
+            epas = epas if isinstance(epas, list) else []
+            rubrics = rubrics if isinstance(rubrics, list) else []
+            strengths = strengths if isinstance(strengths, list) else []
+            improvements = improvements if isinstance(improvements, list) else []
+            
+            for i in range(4):
+                row = i + 1
+                if i < len(epas):
+                    draw_text(epas[i], page2[f'epa_row{row}'], page_height)
+                if i < len(rubrics):
+                    draw_text(rubrics[i], page2[f'rubric_row{row}'], page_height)
+                if i < len(strengths):
+                    draw_text(strengths[i], page2[f'strength_row{row}'], page_height)
+                if i < len(improvements):
+                    draw_text(improvements[i], page2[f'improve_row{row}'], page_height)
         
         c.save()
         overlay_buffer.seek(0)
@@ -420,7 +497,7 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
         return output_buffer.getvalue()
         
     except Exception as e:
-        st.error(f"Error creating PDF: {str(e)}")
+        st.error(f"Error creating PDF for case: {str(e)}")
         return None
 
 def main():
@@ -453,12 +530,39 @@ def main():
             └── {FONT_FILE}  # Custom font (optional)
             ```
             
+            **JSON Format Required:**
+            Your `{CASES_FILE}` must be a JSON array of objects:
+            ```json
+            [
+              {{
+                "case_id": "case_001",
+                "date": "2024-01-15",
+                "age": "28",
+                "gender": "Male",
+                "main_theme": "...",
+                "case_summary": "...",
+                "self_reflection": {{
+                  "what_did_right": "...",
+                  "needs_development": "..."
+                }},
+                "signature_mi": "Dr. Smith",
+                "epa_assessment": {{
+                  "epa_tested": ["EPA 1", "EPA 2", ...],
+                  "rubric_levels": ["Level A", "Level B", ...],
+                  "strength_points": ["...", ...],
+                  "points_needing_improvement": ["...", ...]
+                }}
+              }},
+              ...
+            ]
+            ```
+            
             **Troubleshooting:**
             - Ensure the `/input` folder exists in your repository
             - Check that filenames match exactly (case-sensitive)
             - Verify file formats: PDF, JSON, TTF/OTF
             - Make sure files are not corrupted
-            - JSON file should be an array of objects: `[{{"case_id": "...", ...}}, ...]`
+            - Validate JSON syntax at jsonlint.com
             
             **Current input folder location:** `{INPUT_FOLDER}`
             """)
@@ -474,7 +578,11 @@ def main():
     # Show data status in sidebar
     st.sidebar.header("📁 Loaded Data")
     st.sidebar.success(f"✅ PDF Template: {PDF_FILE}")
-    st.sidebar.success(f"✅ Cases: {len(st.session_state.cases_data)} loaded")
+    
+    # SAFE handling of cases count
+    cases_count = len(st.session_state.cases_data) if isinstance(st.session_state.cases_data, list) else 0
+    st.sidebar.success(f"✅ Cases: {cases_count} loaded")
+    
     if st.session_state.font_bytes:
         st.sidebar.success(f"✅ Custom Font: {FONT_FILE}")
     else:
@@ -579,23 +687,30 @@ def main():
         
         st.markdown("---")
         
-        # FIXED: Form processing with proper placeholder handling
+        # FIXED: Form processing with ROBUST error handling
         st.subheader("📄 Process Forms")
         
-        cases_count = len(st.session_state.cases_data) if st.session_state.cases_data else 0
+        # SAFE cases count
         st.write(f"**📊 Cases to process:** {cases_count}")
         
         if cases_count == 0:
-            st.warning("No cases found in cases_data.json")
+            st.warning("No valid cases found in cases_data.json")
             st.info("💡 Make sure your cases_data.json file contains a valid JSON array of case objects.")
         else:
-            # Show sample case structure for verification
+            # Show sample case structure for verification - FIXED WITH SAFETY CHECKS
             if st.button("👁️ Preview First Case", use_container_width=True):
-                if st.session_state.cases_data and len(st.session_state.cases_data) > 0:
-                    first_case = st.session_state.cases_data[0]
-                    st.json(first_case)
-                else:
-                    st.warning("No cases available to preview")
+                try:
+                    if (isinstance(st.session_state.cases_data, list) and 
+                        len(st.session_state.cases_data) > 0):
+                        first_case = st.session_state.cases_data[0]
+                        if isinstance(first_case, dict):
+                            st.json(first_case)
+                        else:
+                            st.error(f"First case is not a valid object. Type: {type(first_case).__name__}")
+                    else:
+                        st.warning("No cases available to preview")
+                except Exception as e:
+                    st.error(f"Error previewing case: {str(e)}")
             
             if st.button("🚀 Fill All Forms", type="primary", use_container_width=True):
                 
@@ -604,22 +719,34 @@ def main():
                 status_container = st.container()
                 
                 filled_pdfs = {}
+                failed_cases = []
                 
                 try:
                     for i, case in enumerate(st.session_state.cases_data):
-                        # FIXED: Use container with text() method instead of write()
+                        # VALIDATE each case is a dictionary
+                        if not isinstance(case, dict):
+                            failed_cases.append(f"Case {i+1}: Invalid type ({type(case).__name__})")
+                            continue
+                        
+                        # FIXED: Use container with text() method
                         with status_container:
-                            st.text(f"Processing case {i+1}/{cases_count}: {case.get('case_id', f'Case {i+1}')}")
+                            case_id = case.get('case_id', f'Case {i+1}')
+                            st.text(f"Processing case {i+1}/{cases_count}: {case_id}")
                         
                         progress_bar.progress((i + 1) / cases_count)
                         
-                        case_id = case.get('case_id', f'case_{i+1}')
-                        filled_pdf = create_filled_pdf(case, st.session_state.pdf_bytes, st.session_state.font_bytes)
-                        
-                        if filled_pdf:
-                            filled_pdfs[f"{case_id}_filled.pdf"] = filled_pdf
+                        # Process the case
+                        try:
+                            filled_pdf = create_filled_pdf(case, st.session_state.pdf_bytes, st.session_state.font_bytes)
+                            
+                            if filled_pdf:
+                                filled_pdfs[f"{case_id}_filled.pdf"] = filled_pdf
+                            else:
+                                failed_cases.append(f"{case_id}: PDF creation failed")
+                        except Exception as e:
+                            failed_cases.append(f"{case_id}: {str(e)}")
                     
-                    # Create ZIP file
+                    # Create ZIP file if we have any successful PDFs
                     if filled_pdfs:
                         zip_buffer = BytesIO()
                         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
@@ -632,11 +759,17 @@ def main():
                         status_container.empty()
                         progress_bar.empty()
                         
-                        st.success(f"🎉 Successfully processed {len(filled_pdfs)} forms!")
-                        st.balloons()
+                        if failed_cases:
+                            st.warning(f"⚠️ Processed {len(filled_pdfs)} of {cases_count} forms successfully")
+                            with st.expander("Failed Cases"):
+                                for error in failed_cases:
+                                    st.error(error)
+                        else:
+                            st.success(f"🎉 Successfully processed all {len(filled_pdfs)} forms!")
+                            st.balloons()
                         
                         st.download_button(
-                            label="📥 Download Filled Forms (ZIP)",
+                            label=f"📥 Download {len(filled_pdfs)} Filled Forms (ZIP)",
                             data=zip_buffer.getvalue(),
                             file_name="filled_medical_forms.zip",
                             mime="application/zip",
@@ -646,11 +779,16 @@ def main():
                         status_container.empty()
                         progress_bar.empty()
                         st.error("❌ No forms were successfully processed")
+                        if failed_cases:
+                            with st.expander("Error Details"):
+                                for error in failed_cases:
+                                    st.error(error)
                 
                 except Exception as e:
                     status_container.empty()
                     progress_bar.empty()
-                    st.error(f"❌ Error during processing: {str(e)}")
+                    st.error(f"❌ Critical error during processing: {str(e)}")
+                    st.exception(e)
         
         # Instructions
         st.markdown("---")

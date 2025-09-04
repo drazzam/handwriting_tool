@@ -6,23 +6,30 @@ import tempfile
 import base64
 from io import BytesIO
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import fitz  # PyMuPDF
 from reportlab.pdfgen import canvas
 from reportlab.lib.colors import Color
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from PyPDF2 import PdfWriter, PdfReader
+import plotly.graph_objects as go
 import warnings
 warnings.filterwarnings('ignore')
 
 # Page config
 st.set_page_config(
-    page_title="PDF Form Filler",
+    page_title="PDF Medical Form Filler",
     page_icon="📋",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Constants for data files in input folder
+INPUT_FOLDER = os.path.join(os.path.dirname(__file__), "input") if os.path.exists(os.path.join(os.path.dirname(__file__), "input")) else "input"
+PDF_FILE = "empty_form.pdf"
+CASES_FILE = "cases_data.json"
+FONT_FILE = "AzzamHandwriting-Regular.ttf"
 
 # Initialize session state
 if 'field_specs' not in st.session_state:
@@ -55,19 +62,23 @@ if 'field_specs' not in st.session_state:
         }
     }
 
-if 'pdf_images' not in st.session_state:
-    st.session_state.pdf_images = {}
+# Initialize other session state variables
+for key, default in [
+    ('pdf_images', {}),
+    ('current_page', 1),
+    ('selected_field', None),
+    ('data_loaded', False),
+    ('cases_data', []),
+    ('pdf_bytes', None),
+    ('font_bytes', None),
+    ('loading_error', None)
+]:
+    if key not in st.session_state:
+        st.session_state[key] = default
 
-if 'current_page' not in st.session_state:
-    st.session_state.current_page = 1
-
-if 'uploaded_files' not in st.session_state:
-    st.session_state.uploaded_files = {}
-
-# Helper functions
 @st.cache_data
 def load_pdf_as_images(pdf_bytes):
-    """Convert PDF to images"""
+    """Convert PDF to images for display"""
     images = {}
     try:
         pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -84,8 +95,64 @@ def load_pdf_as_images(pdf_bytes):
         pdf_doc.close()
         return images
     except Exception as e:
-        st.error(f"Error loading PDF: {str(e)}")
+        st.error(f"Error converting PDF to images: {str(e)}")
         return {}
+
+def load_input_data():
+    """Load all required data from the input folder automatically"""
+    
+    # Check if input folder exists
+    if not os.path.exists(INPUT_FOLDER):
+        st.session_state.loading_error = f"❌ Input folder not found at: {INPUT_FOLDER}"
+        return False
+    
+    errors = []
+    
+    # Load PDF file
+    pdf_path = os.path.join(INPUT_FOLDER, PDF_FILE)
+    if not os.path.exists(pdf_path):
+        errors.append(f"• Missing: {PDF_FILE}")
+    else:
+        try:
+            with open(pdf_path, 'rb') as f:
+                st.session_state.pdf_bytes = f.read()
+            st.session_state.pdf_images = load_pdf_as_images(st.session_state.pdf_bytes)
+            if not st.session_state.pdf_images:
+                errors.append(f"• Could not process: {PDF_FILE}")
+        except Exception as e:
+            errors.append(f"• Error loading {PDF_FILE}: {str(e)}")
+    
+    # Load cases data
+    cases_path = os.path.join(INPUT_FOLDER, CASES_FILE)
+    if not os.path.exists(cases_path):
+        errors.append(f"• Missing: {CASES_FILE}")
+    else:
+        try:
+            with open(cases_path, 'r', encoding='utf-8') as f:
+                st.session_state.cases_data = json.load(f)
+            if not st.session_state.cases_data:
+                errors.append(f"• Empty or invalid: {CASES_FILE}")
+        except Exception as e:
+            errors.append(f"• Error loading {CASES_FILE}: {str(e)}")
+    
+    # Load font (optional)
+    font_path = os.path.join(INPUT_FOLDER, FONT_FILE)
+    if os.path.exists(font_path):
+        try:
+            with open(font_path, 'rb') as f:
+                st.session_state.font_bytes = f.read()
+        except Exception as e:
+            # Font is optional, so just warn
+            st.warning(f"Could not load custom font: {str(e)}")
+    
+    # Check for errors
+    if errors:
+        st.session_state.loading_error = "❌ **Data Loading Errors:**\n\n" + "\n".join(errors)
+        return False
+    
+    st.session_state.data_loaded = True
+    st.session_state.loading_error = None
+    return True
 
 def inches_to_pixels(inches, dpi=150):
     return int(inches * dpi)
@@ -93,76 +160,121 @@ def inches_to_pixels(inches, dpi=150):
 def pixels_to_inches(pixels, dpi=150):
     return pixels / dpi
 
-def create_field_overlay(img, page_key, selected_field=None):
-    """Create overlay with field rectangles"""
-    from PIL import Image, ImageDraw, ImageFont
+def create_interactive_plotly_figure(page_num):
+    """Create interactive Plotly figure with draggable rectangles"""
+    if page_num not in st.session_state.pdf_images:
+        return None
     
+    # Get image
+    img = st.session_state.pdf_images[page_num]
+    img_height, img_width = img.shape[:2]
+    
+    # Convert image to base64 for Plotly
     img_pil = Image.fromarray(img)
-    overlay = Image.new('RGBA', img_pil.size, (255, 255, 255, 0))
-    draw = ImageDraw.Draw(overlay)
+    buffer = BytesIO()
+    img_pil.save(buffer, format='PNG')
+    img_base64 = base64.b64encode(buffer.getvalue()).decode()
     
-    colors = [
-        (255, 0, 0, 100),      # red
-        (0, 0, 255, 100),      # blue
-        (0, 255, 0, 100),      # green
-        (255, 165, 0, 100),    # orange
-        (128, 0, 128, 100),    # purple
-        (165, 42, 42, 100),    # brown
-        (255, 192, 203, 100),  # pink
-        (128, 128, 128, 100),  # gray
-        (128, 128, 0, 100),    # olive
-        (0, 255, 255, 100),    # cyan
-    ]
+    # Create figure
+    fig = go.Figure()
     
-    dpi = 150
+    # Add background image
+    fig.add_layout_image(
+        dict(
+            source=f"data:image/png;base64,{img_base64}",
+            xref="x", yref="y",
+            x=0, y=img_height,
+            sizex=img_width, sizey=img_height,
+            sizing="stretch",
+            opacity=1.0,
+            layer="below"
+        )
+    )
+    
+    # Add draggable shapes for each field
+    page_key = f"page{page_num}"
+    colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan',
+              'magenta', 'yellow', 'lime', 'navy', 'teal', 'silver', 'maroon', 'fuchsia', 'aqua', 'black']
     
     for i, (field_name, spec) in enumerate(st.session_state.field_specs[page_key].items()):
-        x = inches_to_pixels(spec['x'], dpi)
-        y = inches_to_pixels(spec['y'], dpi)
-        w = inches_to_pixels(spec['w'], dpi)
-        h = inches_to_pixels(spec['h'], dpi)
+        # Convert inches to pixels
+        x_px = inches_to_pixels(spec['x'])
+        y_px = img_height - inches_to_pixels(spec['y'] + spec['h'])  # Flip Y for Plotly
+        w_px = inches_to_pixels(spec['w'])
+        h_px = inches_to_pixels(spec['h'])
         
-        # Different color for selected field
-        if field_name == selected_field:
-            color = (0, 255, 0, 150)  # bright green
-            outline = (0, 255, 0, 255)
-            width = 4
+        color = colors[i % len(colors)]
+        
+        # Highlight selected field
+        if field_name == st.session_state.selected_field:
+            color = 'lime'
+            opacity = 0.6
+            line_width = 4
         else:
-            color = colors[i % len(colors)]
-            outline = tuple(list(color[:3]) + [255])
-            width = 2
+            opacity = 0.3
+            line_width = 2
         
-        # Draw rectangle
-        draw.rectangle([x, y, x+w, y+h], fill=color, outline=outline, width=width)
+        # Add draggable rectangle
+        fig.add_shape(
+            type="rect",
+            x0=x_px, y0=y_px,
+            x1=x_px + w_px, y1=y_px + h_px,
+            line=dict(color=color, width=line_width),
+            fillcolor=color,
+            opacity=opacity,
+            editable=True,  # This makes it draggable
+            name=field_name,
+            layer="above"
+        )
         
-        # Draw label
-        label_x = x + w//2
-        label_y = y + h//2
-        
-        # Try to load a font, fallback to default
-        try:
-            font = ImageFont.truetype("arial.ttf", 12)
-        except:
-            font = ImageFont.load_default()
-        
-        # Get text size
-        bbox = draw.textbbox((0, 0), field_name, font=font)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
-        
-        # Draw text background
-        text_bg = (0, 0, 0, 200) if field_name == selected_field else (255, 255, 255, 200)
-        draw.rectangle([label_x - text_w//2 - 2, label_y - text_h//2 - 2,
-                       label_x + text_w//2 + 2, label_y + text_h//2 + 2], fill=text_bg)
-        
-        # Draw text
-        text_color = (255, 255, 255) if field_name == selected_field else (0, 0, 0)
-        draw.text((label_x - text_w//2, label_y - text_h//2), field_name, 
-                 fill=text_color, font=font)
+        # Add text annotation
+        fig.add_annotation(
+            x=x_px + w_px/2,
+            y=y_px + h_px/2,
+            text=field_name,
+            showarrow=False,
+            font=dict(size=10, color="white" if field_name == st.session_state.selected_field else "black"),
+            bgcolor="black" if field_name == st.session_state.selected_field else "white",
+            opacity=0.8,
+            bordercolor="white",
+            borderwidth=1
+        )
     
-    # Combine original image with overlay
-    combined = Image.alpha_composite(img_pil.convert('RGBA'), overlay)
-    return np.array(combined.convert('RGB'))
+    # Configure layout
+    fig.update_layout(
+        title=dict(
+            text=f"🎯 Page {page_num} - Interactive Field Positioning<br>" +
+                 f"<sub>Drag rectangles to reposition fields. Green = selected field.</sub>",
+            x=0.5,
+            font=dict(size=16)
+        ),
+        xaxis=dict(
+            range=[0, img_width],
+            showgrid=False,
+            zeroline=False,
+            showticklabels=False,
+            fixedrange=False
+        ),
+        yaxis=dict(
+            range=[0, img_height],
+            showgrid=False,
+            zeroline=False,
+            showticklabels=False,
+            scaleanchor="x",
+            scaleratio=1,
+            fixedrange=False
+        ),
+        width=900,
+        height=1100,
+        margin=dict(l=20, r=20, t=80, b=20),
+        showlegend=False,
+        dragmode='pan'
+    )
+    
+    # Enable shape editing
+    fig.update_shapes(dict(editable=True))
+    
+    return fig
 
 def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
     """Create filled PDF for a single case"""
@@ -184,7 +296,6 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
         
         if font_bytes:
             try:
-                # Save font to temporary file
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.ttf') as tmp_font:
                     tmp_font.write(font_bytes)
                     tmp_font_path = tmp_font.name
@@ -307,110 +418,138 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
         st.error(f"Error creating PDF: {str(e)}")
         return None
 
-# Main app
 def main():
+    """Main application"""
+    
+    # Auto-load data on startup
+    if not st.session_state.data_loaded and not st.session_state.loading_error:
+        with st.spinner("🔄 Loading data from /input folder..."):
+            load_input_data()
+    
+    # Show header
     st.title("📋 PDF Medical Form Filler")
-    st.markdown("Interactive tool for positioning and filling medical forms")
+    st.markdown("*Interactive field positioning with drag-and-drop functionality*")
     
-    # Sidebar for file uploads
-    st.sidebar.header("📁 Upload Files")
-    
-    # File uploads
-    pdf_file = st.sidebar.file_uploader(
-        "Upload PDF Template", 
-        type=['pdf'],
-        help="Upload your empty medical form template (PDF)"
-    )
-    
-    cases_file = st.sidebar.file_uploader(
-        "Upload Cases Data", 
-        type=['json'],
-        help="Upload JSON file containing case data"
-    )
-    
-    font_file = st.sidebar.file_uploader(
-        "Upload Custom Font (Optional)", 
-        type=['ttf', 'otf'],
-        help="Upload custom font file (optional)"
-    )
-    
-    # Store uploaded files in session state
-    if pdf_file:
-        st.session_state.uploaded_files['pdf'] = pdf_file.read()
-        st.session_state.pdf_images = load_pdf_as_images(st.session_state.uploaded_files['pdf'])
-    
-    if cases_file:
-        st.session_state.uploaded_files['cases'] = json.loads(cases_file.read())
-    
-    if font_file:
-        st.session_state.uploaded_files['font'] = font_file.read()
-    
-    # Check if required files are uploaded
-    if 'pdf' not in st.session_state.uploaded_files:
-        st.info("👆 Please upload your PDF template to get started")
+    # Handle loading errors
+    if st.session_state.loading_error:
+        st.error(st.session_state.loading_error)
+        
+        with st.expander("📁 **Setup Instructions**", expanded=True):
+            st.markdown(f"""
+            **Required files in `/input` folder:**
+            
+            ```
+            {INPUT_FOLDER}/
+            ├── {PDF_FILE}          # Your blank PDF form template
+            ├── {CASES_FILE}         # Your case data in JSON format
+            └── {FONT_FILE}  # Custom font (optional)
+            ```
+            
+            **Troubleshooting:**
+            - Ensure the `/input` folder exists in your repository
+            - Check that filenames match exactly (case-sensitive)
+            - Verify file formats: PDF, JSON, TTF/OTF
+            - Make sure files are not corrupted
+            
+            **Current input folder location:** `{INPUT_FOLDER}`
+            """)
+        
+        if st.button("🔄 Retry Loading Data"):
+            st.session_state.data_loaded = False
+            st.session_state.loading_error = None
+            st.experimental_rerun()
+        
         return
     
-    if 'cases' not in st.session_state.uploaded_files:
-        st.info("👆 Please upload your cases data (JSON) to continue")
-        return
+    # Show data status in sidebar
+    st.sidebar.header("📁 Loaded Data")
+    st.sidebar.success(f"✅ PDF Template: {PDF_FILE}")
+    st.sidebar.success(f"✅ Cases: {len(st.session_state.cases_data)} loaded")
+    if st.session_state.font_bytes:
+        st.sidebar.success(f"✅ Custom Font: {FONT_FILE}")
+    else:
+        st.sidebar.info(f"ℹ️ Using default font (no {FONT_FILE} found)")
+    
+    st.sidebar.markdown("---")
+    st.sidebar.caption(f"📂 Data source: `/input` folder")
     
     # Main interface
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([3, 1])
     
     with col1:
-        st.header("🎯 Field Positioning")
+        st.header("🎯 Interactive Field Positioning")
         
-        # Page selector
-        page_option = st.selectbox("Select Page", ["Page 1", "Page 2"])
-        current_page = 1 if page_option == "Page 1" else 2
-        st.session_state.current_page = current_page
+        # Page and field selection
+        col_page, col_field = st.columns([1, 2])
         
-        # Display PDF with overlays
-        if current_page in st.session_state.pdf_images:
+        with col_page:
+            page_option = st.selectbox("📄 Select Page", ["Page 1", "Page 2"])
+            current_page = 1 if page_option == "Page 1" else 2
+            st.session_state.current_page = current_page
+        
+        with col_field:
             page_key = f"page{current_page}"
-            
-            # Field selector
             field_names = list(st.session_state.field_specs[page_key].keys())
-            selected_field = st.selectbox("Select Field to Adjust", field_names)
+            selected_field = st.selectbox("🎯 Select Field", field_names, key="field_selector")
+            st.session_state.selected_field = selected_field
+        
+        # Create and display interactive Plotly figure
+        if current_page in st.session_state.pdf_images:
+            fig = create_interactive_plotly_figure(current_page)
             
-            # Create image with overlays
-            img_with_overlay = create_field_overlay(
-                st.session_state.pdf_images[current_page], 
-                page_key, 
-                selected_field
-            )
-            
-            st.image(img_with_overlay, caption=f"Page {current_page} - Green = Selected Field", use_column_width=True)
-            
-            # Position adjustment controls
-            st.subheader(f"📐 Adjust '{selected_field}' Position")
-            
-            spec = st.session_state.field_specs[page_key][selected_field]
+            if fig:
+                st.plotly_chart(fig, use_container_width=True, key=f"plotly_fig_{current_page}")
+                
+                st.info("💡 **Tip:** Drag the colored rectangles directly on the PDF to reposition fields. Green = selected field.")
+        
+        # Precise adjustment controls
+        st.subheader(f"📐 Fine-tune '{st.session_state.selected_field}' Position")
+        
+        if st.session_state.selected_field:
+            page_key = f"page{current_page}"
+            spec = st.session_state.field_specs[page_key][st.session_state.selected_field]
             
             col_x, col_y = st.columns(2)
             with col_x:
-                new_x = st.slider("X Position (inches)", 0.0, 8.5, spec['x'], 0.05, key=f"x_{selected_field}")
+                new_x = st.slider("X Position (inches)", 0.0, 8.5, spec['x'], 0.05, 
+                                key=f"x_slider_{st.session_state.selected_field}")
             with col_y:
-                new_y = st.slider("Y Position (inches)", 0.0, 11.0, spec['y'], 0.05, key=f"y_{selected_field}")
+                new_y = st.slider("Y Position (inches)", 0.0, 11.0, spec['y'], 0.05,
+                                key=f"y_slider_{st.session_state.selected_field}")
             
             col_w, col_h = st.columns(2)
             with col_w:
-                new_w = st.slider("Width (inches)", 0.1, 8.0, spec['w'], 0.05, key=f"w_{selected_field}")
+                new_w = st.slider("Width (inches)", 0.1, 8.0, spec['w'], 0.05,
+                                key=f"w_slider_{st.session_state.selected_field}")
             with col_h:
-                new_h = st.slider("Height (inches)", 0.1, 3.0, spec['h'], 0.05, key=f"h_{selected_field}")
+                new_h = st.slider("Height (inches)", 0.1, 3.0, spec['h'], 0.05,
+                                key=f"h_slider_{st.session_state.selected_field}")
             
-            # Update field specs
-            st.session_state.field_specs[page_key][selected_field].update({
+            # Update field specs from sliders
+            st.session_state.field_specs[page_key][st.session_state.selected_field].update({
                 'x': round(new_x, 2),
                 'y': round(new_y, 2),
                 'w': round(new_w, 2),
                 'h': round(new_h, 2)
             })
+            
+            # Show current values
+            st.success(f"📍 **{st.session_state.selected_field}**: X={new_x:.2f}\", Y={new_y:.2f}\", W={new_w:.2f}\", H={new_h:.2f}\"")
     
     with col2:
         st.header("🎛️ Controls")
         
-        # Show current coordinates
+        # Quick field selector
+        st.subheader("📋 Quick Field Selection")
+        page_key = f"page{current_page}"
+        for field_name in st.session_state.field_specs[page_key].keys():
+            if st.button(f"📍 {field_name.replace('_', ' ').title()}", key=f"quick_{field_name}"):
+                st.session_state.selected_field = field_name
+                st.experimental_rerun()
+        
+        st.markdown("---")
+        
+        # Coordinate display
         if st.button("📊 Show All Coordinates"):
             st.subheader("Current Coordinates")
             for page_key, fields in st.session_state.field_specs.items():
@@ -418,38 +557,38 @@ def main():
                 coord_data = []
                 for field_name, spec in fields.items():
                     coord_data.append({
-                        'Field': field_name,
+                        'Field': field_name.replace('_', ' ').title(),
                         'X': f"{spec['x']:.2f}\"",
-                        'Y': f"{spec['y']:.2f}\"",
+                        'Y': f"{spec['y']:.2f}\"", 
                         'W': f"{spec['w']:.2f}\"",
                         'H': f"{spec['h']:.2f}\"",
-                        'Font': spec['font']
+                        'Font': f"{spec['font']}pt"
                     })
-                st.table(coord_data)
+                st.dataframe(coord_data, use_container_width=True)
         
         st.markdown("---")
         
         # Form processing
         st.subheader("📄 Process Forms")
         
-        cases_count = len(st.session_state.uploaded_files.get('cases', []))
-        st.write(f"**Cases to process:** {cases_count}")
+        cases_count = len(st.session_state.cases_data)
+        st.write(f"**📊 Cases to process:** {cases_count}")
         
-        if st.button("🚀 Fill All Forms", type="primary"):
-            if cases_count > 0:
+        if cases_count == 0:
+            st.warning("No cases found in data file")
+        else:
+            if st.button("🚀 Fill All Forms", type="primary", use_container_width=True):
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
                 filled_pdfs = {}
-                pdf_bytes = st.session_state.uploaded_files['pdf']
-                font_bytes = st.session_state.uploaded_files.get('font')
                 
-                for i, case in enumerate(st.session_state.uploaded_files['cases']):
-                    status_text.text(f"Processing case {i+1}/{cases_count}...")
+                for i, case in enumerate(st.session_state.cases_data):
+                    status_text.text(f"Processing case {i+1}/{cases_count}: {case.get('case_id', f'Case {i+1}')}")
                     progress_bar.progress((i + 1) / cases_count)
                     
                     case_id = case.get('case_id', f'case_{i+1}')
-                    filled_pdf = create_filled_pdf(case, pdf_bytes, font_bytes)
+                    filled_pdf = create_filled_pdf(case, st.session_state.pdf_bytes, st.session_state.font_bytes)
                     
                     if filled_pdf:
                         filled_pdfs[f"{case_id}_filled.pdf"] = filled_pdf
@@ -463,32 +602,42 @@ def main():
                     
                     zip_buffer.seek(0)
                     
-                    # Download button
-                    st.success(f"✅ Successfully processed {len(filled_pdfs)} forms!")
+                    # Success message and download
+                    status_text.empty()
+                    progress_bar.empty()
+                    
+                    st.success(f"🎉 Successfully processed {len(filled_pdfs)} forms!")
+                    st.balloons()
+                    
                     st.download_button(
                         label="📥 Download Filled Forms (ZIP)",
                         data=zip_buffer.getvalue(),
                         file_name="filled_medical_forms.zip",
-                        mime="application/zip"
+                        mime="application/zip",
+                        use_container_width=True
                     )
                 else:
                     st.error("❌ No forms were successfully processed")
         
         # Instructions
         st.markdown("---")
-        st.subheader("📋 Instructions")
+        st.subheader("📋 How to Use")
         st.markdown("""
-        1. **Upload Files**: PDF template and cases JSON
-        2. **Select Page**: Choose Page 1 or Page 2
-        3. **Select Field**: Pick field to adjust
-        4. **Adjust Position**: Use sliders to position field
-        5. **Repeat**: Adjust all fields as needed
-        6. **Process**: Click "Fill All Forms" when ready
-        7. **Download**: Get your completed forms as ZIP
+        **🎯 Positioning:**
+        1. Select page and field
+        2. Drag rectangles on PDF
+        3. Fine-tune with sliders
+        4. Green = selected field
         
-        **Colors:**
-        - 🟢 **Green**: Selected field
-        - 🔴 **Red/Blue/etc**: Other fields
+        **📄 Processing:**
+        1. Position all fields
+        2. Click "Fill All Forms"  
+        3. Download ZIP file
+        
+        **💡 Tips:**
+        - Data loads from `/input` folder
+        - Drag rectangles for quick positioning
+        - Use sliders for precision
         """)
 
 if __name__ == "__main__":

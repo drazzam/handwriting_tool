@@ -1,0 +1,142 @@
+[
+  {
+    "case_id": "case_001_gastroenteritis",
+    "date": "2024-01-15",
+    "age": "28",
+    "gender": "Male",
+    "main_theme": "Viral gastroenteritis with mild dehydration",
+    "case_summary": "24-hour history of watery diarrhea and cramping. Patient shows signs of mild dehydration but is responsive to oral rehydration therapy. No fever or blood in stool.",
+    "self_reflection": {
+      "what_did_right": "Proper assessment of hydration status and provided appropriate ORS counseling to patient",
+      "needs_development": "Need to improve dietary counseling specifics and follow-up planning"
+    },
+    "epa_assessment": {
+      "epa_tested": ["EPA 2", "EPA 6", "EPA 9", "EPA 12"],
+      "rubric_levels": ["Level C", "Level C", "Level C", "Level C"],
+      "strength_points": [
+        "Hydration status grading",
+        "ORS therapy coaching", 
+        "Clear medical documentation",
+        "Return visit instructions"
+      ],
+      "points_needing_improvement": [
+        "Orthostatic vitals measurement",
+        "Specific dietary recommendations",
+        "Weight tracking protocol", 
+        "Phone follow-up scheduling"
+      ]
+    }
+  },
+  {
+    "case_id": "case_002_hypertension",
+    "date": "2024-01-16",
+    "age": "45",
+    "gender": "Female",
+    "main_theme": "Hypertension management and lifestyle counseling",
+    "case_summary": "Established hypertension patient for routine follow-up. BP 150/95 on current medications. Discussed medication adherence and lifestyle modifications.",
+    "self_reflection": {
+      "what_did_right": "Comprehensive medication review and patient education about hypertension risks",
+      "needs_development": "Better motivational interviewing techniques for lifestyle changes"
+    },
+    "epa_assessment": {
+      "epa_tested": ["EPA 1", "EPA 4", "EPA 8", "EPA 11"],
+      "rubric_levels": ["Level B", "Level C", "Level B", "Level C"],
+      "strength_points": [
+        "Medication reconciliation",
+        "Risk factor assessment", 
+        "Patient education delivery",
+        "Care plan development"
+      ],
+      "points_needing_improvement": [
+        "Motivational interviewing",
+        "Behavioral change counseling",
+        "Community resource referrals", 
+        "Long-term goal setting"
+      ]
+    }
+  },
+  {
+    "case_id": "case_003_pediatric_fever",
+    "date": "2024-01-17",
+    "age": "3",
+    "gender": "Female",
+    "main_theme": "Pediatric fever evaluation and parent counseling",
+    "case_summary": "3-year-old with 2-day history of fever and irritability. No respiratory or GI symptoms. Physical exam normal except for fever. Viral illness suspected.",
+    "self_reflection": {
+      "what_did_right": "Thorough pediatric physical examination and appropriate parent education",
+      "needs_development": "Improve comfort with pediatric dosing calculations and fever thresholds"
+    },
+    "epa_assessment": {
+      "epa_tested": ["EPA 3", "EPA 5", "EPA 7", "EPA 13"],
+      "rubric_levels": ["Level C", "Level B", "Level C", "Level C"],
+      "strength_points": [
+        "Pediatric examination skills",
+        "Parent communication", 
+        "Age-appropriate assessment",
+        "Safety netting advice"
+      ],
+      "points_needing_improvement": [
+        "Medication dosing accuracy",
+        "Fever management protocols",
+        "Reassurance techniques", 
+        "When to return guidance"
+      ]
+    }
+  },
+  {
+    "case_id": "case_004_diabetes_followup",
+    "date": "2024-01-18",
+    "age": "52",
+    "gender": "Male",
+    "main_theme": "Type 2 diabetes management and complication screening",
+    "case_summary": "Type 2 diabetes follow-up appointment. HbA1c 8.2%, discussing medication adjustment and screening for complications. Patient motivated to improve control.",
+    "self_reflection": {
+      "what_did_right": "Comprehensive diabetes assessment including foot exam and medication review",
+      "needs_development": "Better understanding of insulin adjustment algorithms and timing"
+    },
+    "epa_assessment": {
+      "epa_tested": ["EPA 2", "EPA 4", "EPA 9", "EPA 15"],
+      "rubric_levels": ["Level B", "Level C", "Level C", "Level B"],
+      "strength_points": [
+        "Systematic complication screening",
+        "Medication adherence counseling", 
+        "Patient-centered goal setting",
+        "Lifestyle modification support"
+      ],
+      "points_needing_improvement": [
+        "Insulin dosing calculations",
+        "Hypoglycemia management",
+        "Technology integration", 
+        "Referral coordination"
+      ]
+    }
+  },
+  {
+    "case_id": "case_005_mental_health",
+    "date": "2024-01-19",
+    "age": "29",
+    "gender": "Non-binary",
+    "main_theme": "Anxiety and depression screening with initial management",
+    "case_summary": "Patient presenting with symptoms of anxiety and depression. PHQ-9 score of 14, GAD-7 score of 12. Discussing treatment options and referral resources.",
+    "self_reflection": {
+      "what_did_right": "Appropriate use of screening tools and empathetic communication approach",
+      "needs_development": "More confidence with mental health medication prescribing and crisis assessment"
+    },
+    "epa_assessment": {
+      "epa_tested": ["EPA 6", "EPA 8", "EPA 10", "EPA 14"],
+      "rubric_levels": ["Level C", "Level B", "Level C", "Level C"],
+      "strength_points": [
+        "Mental health screening tools",
+        "Therapeutic communication", 
+        "Collaborative care planning",
+        "Resource identification"
+      ],
+      "points_needing_improvement": [
+        "Medication selection criteria",
+        "Suicide risk assessment",
+        "Therapy referral processes", 
+        "Crisis intervention skills"
+      ]
+    }
+  }
+]

@@ -531,7 +531,9 @@ def main():
             ```
             
             **JSON Format Required:**
-            Your `{CASES_FILE}` must be a JSON array of objects:
+            Your `{CASES_FILE}` can be in either of these formats:
+            
+            **Format 1 (Standard):**
             ```json
             [
               {{
@@ -539,22 +541,29 @@ def main():
                 "date": "2024-01-15",
                 "age": "28",
                 "gender": "Male",
-                "main_theme": "...",
-                "case_summary": "...",
-                "self_reflection": {{
-                  "what_did_right": "...",
-                  "needs_development": "..."
-                }},
-                "signature_mi": "Dr. Smith",
-                "epa_assessment": {{
-                  "epa_tested": ["EPA 1", "EPA 2", ...],
-                  "rubric_levels": ["Level A", "Level B", ...],
-                  "strength_points": ["...", ...],
-                  "points_needing_improvement": ["...", ...]
-                }}
-              }},
-              ...
+                ...
+              }}
             ]
+            ```
+            
+            **Format 2 (Your Format - Automatically Converted):**
+            ```json
+            {{
+              "cases": [
+                {{
+                  "Date": "2025-07-08",
+                  "Age & Gender": "28 year old male",
+                  "Main theme of the case": "...",
+                  "Case Summary": "...",
+                  "Self Reflection": "Did well: ... Needs work: ...",
+                  "Signature of the MI": "...",
+                  "EPA tested": [2, 6, 9, 12],
+                  "Rubric": ["Level C", ...],
+                  "Strength points": [...],
+                  "Points needing improvement": [...]
+                }}
+              ]
+            }}
             ```
             
             **Troubleshooting:**

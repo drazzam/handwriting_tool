@@ -32,59 +32,47 @@ PDF_FILE = "empty_form.pdf"
 CASES_FILE = "cases_data.json"
 FONT_FILE = "AzzamHandwriting-Regular.ttf"
 
-# Initialize session state with CORRECTED field positions based on actual PDF
+# Initialize session state with CORRECTED font sizes as specified by user
 def initialize_session_state():
-    if 'field_specs' not in st.session_state:
-        # FIXED: Corrected positions based on your actual PDF layout
-        st.session_state.field_specs = {
+    # CRITICAL FIX: Initialize saved_specs to persist changes across page switches
+    if 'saved_specs' not in st.session_state:
+        st.session_state.saved_specs = {
             "page1": {
-                # Date field - right side after "Date:" label
-                "date": {"x": 1.5, "y": 2.6, "w": 2.5, "h": 0.25, "font": 14},
-                
-                # Age & Gender - right side after "Age & Gender:" label
-                "age_gender": {"x": 2.2, "y": 3.0, "w": 3.0, "h": 0.25, "font": 14},
-                
-                # Main theme - large box area
-                "main_theme": {"x": 1.2, "y": 3.6, "w": 6.5, "h": 0.4, "font": 14},
-                
-                # Case Summary - large text area
-                "case_summary": {"x": 0.8, "y": 4.3, "w": 7.0, "h": 1.5, "font": 12},
-                
-                # Self-reflection: What did I do right?
-                "self_reflection_upper": {"x": 0.8, "y": 6.2, "w": 7.0, "h": 0.6, "font": 12},
-                
-                # What needs more development? Plan
-                "self_reflection_lower": {"x": 0.8, "y": 7.0, "w": 7.0, "h": 1.0, "font": 12},
-                
-                # Signature at bottom
-                "signature_mi": {"x": 0.8, "y": 9.8, "w": 3.0, "h": 0.3, "font": 14}
+                # YOUR SPECIFIED FONT SIZES
+                "date": {"x": 1.5, "y": 2.6, "w": 2.5, "h": 0.25, "font": 20},  # 20pt as requested
+                "age_gender": {"x": 2.2, "y": 3.0, "w": 3.0, "h": 0.25, "font": 16.1},  # 16.1pt as requested
+                "main_theme": {"x": 1.2, "y": 3.6, "w": 6.5, "h": 0.4, "font": 21},  # 21pt as requested
+                "case_summary": {"x": 0.8, "y": 4.3, "w": 7.0, "h": 1.5, "font": 18},  # 18pt as requested
+                "self_reflection_upper": {"x": 0.8, "y": 6.2, "w": 7.0, "h": 0.6, "font": 15},
+                "self_reflection_lower": {"x": 0.8, "y": 7.0, "w": 7.0, "h": 1.0, "font": 15},
+                "signature_mi": {"x": 0.8, "y": 9.8, "w": 3.0, "h": 0.3, "font": 24}  # 24pt as requested
             },
             "page2": {
-                # EPA tested column (4 rows)
+                # Page 2 fields with appropriate font sizes
                 "epa_row1": {"x": 0.6, "y": 1.8, "w": 1.8, "h": 0.35, "font": 14},
                 "epa_row2": {"x": 0.6, "y": 2.4, "w": 1.8, "h": 0.35, "font": 14},
                 "epa_row3": {"x": 0.6, "y": 3.0, "w": 1.8, "h": 0.35, "font": 14},
                 "epa_row4": {"x": 0.6, "y": 3.6, "w": 1.8, "h": 0.35, "font": 14},
-                
-                # Rubric column (4 rows)
                 "rubric_row1": {"x": 2.5, "y": 1.8, "w": 1.5, "h": 0.35, "font": 14},
                 "rubric_row2": {"x": 2.5, "y": 2.4, "w": 1.5, "h": 0.35, "font": 14},
                 "rubric_row3": {"x": 2.5, "y": 3.0, "w": 1.5, "h": 0.35, "font": 14},
                 "rubric_row4": {"x": 2.5, "y": 3.6, "w": 1.5, "h": 0.35, "font": 14},
-                
-                # Strength points column (4 rows)
                 "strength_row1": {"x": 4.1, "y": 1.8, "w": 1.8, "h": 0.35, "font": 12},
                 "strength_row2": {"x": 4.1, "y": 2.4, "w": 1.8, "h": 0.35, "font": 12},
                 "strength_row3": {"x": 4.1, "y": 3.0, "w": 1.8, "h": 0.35, "font": 12},
                 "strength_row4": {"x": 4.1, "y": 3.6, "w": 1.8, "h": 0.35, "font": 12},
-                
-                # Points needing improvement column (4 rows)
                 "improve_row1": {"x": 6.0, "y": 1.8, "w": 1.8, "h": 0.35, "font": 12},
                 "improve_row2": {"x": 6.0, "y": 2.4, "w": 1.8, "h": 0.35, "font": 12},
                 "improve_row3": {"x": 6.0, "y": 3.0, "w": 1.8, "h": 0.35, "font": 12},
                 "improve_row4": {"x": 6.0, "y": 3.6, "w": 1.8, "h": 0.35, "font": 12}
             }
         }
+    
+    # Use saved_specs as the working field_specs
+    if 'field_specs' not in st.session_state:
+        # Deep copy the saved specs
+        import copy
+        st.session_state.field_specs = copy.deepcopy(st.session_state.saved_specs)
 
     # Initialize other session state variables
     for key, default in [
@@ -95,7 +83,8 @@ def initialize_session_state():
         ('cases_data', []),
         ('pdf_bytes', None),
         ('font_bytes', None),
-        ('loading_error', None)
+        ('loading_error', None),
+        ('positions_changed', False)  # Track if positions have been modified
     ]:
         if key not in st.session_state:
             st.session_state[key] = default
@@ -333,6 +322,17 @@ def inches_to_pixels(inches, dpi=150):
 def pixels_to_inches(pixels, dpi=150):
     return pixels / dpi
 
+def save_position_to_session(page_key, field_name, coord_type, value):
+    """Callback to save position changes immediately to session state"""
+    if 'saved_specs' not in st.session_state:
+        import copy
+        st.session_state.saved_specs = copy.deepcopy(st.session_state.field_specs)
+    
+    # Update both saved_specs and field_specs
+    st.session_state.saved_specs[page_key][field_name][coord_type] = value
+    st.session_state.field_specs[page_key][field_name][coord_type] = value
+    st.session_state.positions_changed = True
+
 def create_interactive_plotly_figure(page_num):
     """Create interactive Plotly figure with draggable rectangles"""
     if page_num not in st.session_state.pdf_images:
@@ -364,7 +364,10 @@ def create_interactive_plotly_figure(page_num):
     colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan',
               'magenta', 'yellow', 'lime', 'navy', 'teal', 'silver', 'maroon', 'fuchsia', 'aqua', 'black']
     
-    for i, (field_name, spec) in enumerate(st.session_state.field_specs[page_key].items()):
+    # Use saved_specs for display to show current positions
+    specs_to_use = st.session_state.saved_specs if 'saved_specs' in st.session_state else st.session_state.field_specs
+    
+    for i, (field_name, spec) in enumerate(specs_to_use[page_key].items()):
         x_px = inches_to_pixels(spec['x'])
         y_px = img_height - inches_to_pixels(spec['y'] + spec['h'])
         w_px = inches_to_pixels(spec['w'])
@@ -392,10 +395,12 @@ def create_interactive_plotly_figure(page_num):
             layer="above"
         )
         
+        # Show font size in annotation
+        font_size = spec['font']
         fig.add_annotation(
             x=x_px + w_px/2,
             y=y_px + h_px/2,
-            text=field_name,
+            text=f"{field_name}<br>Font: {font_size}pt",
             showarrow=False,
             font=dict(size=10, color="white" if field_name == st.session_state.selected_field else "black"),
             bgcolor="black" if field_name == st.session_state.selected_field else "white",
@@ -439,7 +444,7 @@ def create_interactive_plotly_figure(page_num):
     return fig
 
 def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
-    """Create filled PDF for a single case with ACTUAL DATA"""
+    """Create filled PDF using CURRENT SAVED POSITIONS from session state"""
     try:
         if not isinstance(case_data, dict):
             st.error(f"Invalid case data type: {type(case_data).__name__}")
@@ -471,7 +476,7 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
                 pass
         
         def draw_text(text, spec, page_height):
-            """Draw text using CURRENT field positions from session state"""
+            """Draw text using SAVED positions and font sizes"""
             if not text:
                 return
             
@@ -479,14 +484,17 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
             if not text:
                 return
             
+            # CRITICAL: Use positions from saved_specs (the updated positions)
             x_pts = spec['x'] * 72
             y_pts = (page_height/72 - spec['y'] - spec['h']/2) * 72
             w_pts = spec['w'] * 72
             
-            c.setFont(font_name, spec['font'])
+            # CRITICAL: Use the font size from the spec
+            font_size = spec['font']
+            c.setFont(font_name, font_size)
             c.setFillColor(font_color)
             
-            # Handle long text with wrapping
+            # Handle long text with wrapping for large text areas
             if len(text) > 50 and spec['h'] > 0.5:
                 words = text.split()
                 lines = []
@@ -494,7 +502,7 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
                 
                 for word in words:
                     test_line = f"{current_line} {word}".strip()
-                    text_width = c.stringWidth(test_line, font_name, spec['font'])
+                    text_width = c.stringWidth(test_line, font_name, font_size)
                     
                     if text_width <= w_pts - 10:
                         current_line = test_line
@@ -507,51 +515,50 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
                     lines.append(current_line)
                 
                 # Draw multiple lines
-                line_height = spec['font'] + 2
+                line_height = font_size + 2
                 start_y = y_pts + (len(lines) - 1) * line_height / 2
                 
                 for line in lines:
                     c.drawString(x_pts + 5, start_y, line)
                     start_y -= line_height
             else:
-                # Single line - left align for most fields
+                # Single line - left align
                 c.drawString(x_pts + 5, y_pts, text)
         
-        # FILL PAGE 1 WITH ACTUAL DATA - Use CURRENT positions from session state
-        page1_specs = st.session_state.field_specs['page1']
+        # CRITICAL: Use saved_specs if available (contains user's position changes)
+        specs_to_use = st.session_state.saved_specs if 'saved_specs' in st.session_state else st.session_state.field_specs
         
-        # Fill Date
+        # FILL PAGE 1 WITH ACTUAL DATA using SAVED positions
+        page1_specs = specs_to_use['page1']
+        
+        # Fill each field with its CUSTOM font size
         draw_text(case_data.get('date', ''), page1_specs['date'], page_height)
         
-        # Fill Age & Gender (use combined field if available, otherwise combine)
+        # Age & Gender
         if 'age_gender' in case_data:
             draw_text(case_data['age_gender'], page1_specs['age_gender'], page_height)
         else:
             age_gender = f"{case_data.get('age', '')} {case_data.get('gender', '')}".strip()
             draw_text(age_gender, page1_specs['age_gender'], page_height)
         
-        # Fill Main Theme
         draw_text(case_data.get('main_theme', ''), page1_specs['main_theme'], page_height)
-        
-        # Fill Case Summary
         draw_text(case_data.get('case_summary', ''), page1_specs['case_summary'], page_height)
         
-        # Fill Self Reflection
+        # Self Reflection
         reflection = case_data.get('self_reflection', {})
         if isinstance(reflection, dict):
             draw_text(reflection.get('what_did_right', ''), page1_specs['self_reflection_upper'], page_height)
             draw_text(reflection.get('needs_development', ''), page1_specs['self_reflection_lower'], page_height)
         
-        # Fill Signature
+        # Signature with CUSTOM font size (24pt)
         draw_text(case_data.get('signature_mi', ''), page1_specs['signature_mi'], page_height)
         
-        # PAGE 2 - Fill with ACTUAL EPA data
+        # PAGE 2 - using SAVED positions
         c.showPage()
-        page2_specs = st.session_state.field_specs['page2']
+        page2_specs = specs_to_use['page2']
         epa_data = case_data.get('epa_assessment', {})
         
         if isinstance(epa_data, dict):
-            # Get ACTUAL data from case
             epas = epa_data.get('epa_tested', [])
             rubrics = epa_data.get('rubric_levels', [])
             strengths = epa_data.get('strength_points', [])
@@ -563,23 +570,19 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
             strengths = strengths if isinstance(strengths, list) else []
             improvements = improvements if isinstance(improvements, list) else []
             
-            # Fill the table with ACTUAL data (up to 4 rows)
+            # Fill table with actual data
             for i in range(min(4, max(len(epas), len(rubrics), len(strengths), len(improvements)))):
                 row_num = i + 1
                 
-                # Fill EPA column
                 if i < len(epas):
                     draw_text(str(epas[i]), page2_specs[f'epa_row{row_num}'], page_height)
                 
-                # Fill Rubric column
                 if i < len(rubrics):
                     draw_text(str(rubrics[i]), page2_specs[f'rubric_row{row_num}'], page_height)
                 
-                # Fill Strength points column
                 if i < len(strengths):
                     draw_text(str(strengths[i]), page2_specs[f'strength_row{row_num}'], page_height)
                 
-                # Fill Points needing improvement column
                 if i < len(improvements):
                     draw_text(str(improvements[i]), page2_specs[f'improve_row{row_num}'], page_height)
         
@@ -619,7 +622,7 @@ def main():
             load_input_data()
     
     st.title("📋 PDF Medical Form Filler")
-    st.markdown("*Interactive field positioning with drag-and-drop functionality*")
+    st.markdown("*Interactive field positioning with custom font sizes*")
     
     if st.session_state.loading_error:
         st.error(st.session_state.loading_error)
@@ -635,26 +638,7 @@ def main():
             └── {FONT_FILE}  # Custom font (optional)
             ```
             
-            **JSON Format Accepted:**
-            Your format with `"cases"` array is automatically handled!
-            ```json
-            {{
-              "cases": [
-                {{
-                  "Date": "2025-07-08",
-                  "Age & Gender": "28 year old male",
-                  "Main theme of the case": "...",
-                  "Case Summary": "...",
-                  "Self Reflection": "Did well: ... Needs work: ... Plan: ...",
-                  "Signature of the MI": "Ahmed Yasser Elsayed Azzam",
-                  "EPA tested": [2, 6, 9, 12],
-                  "Rubric": ["Level C", ...],
-                  "Strength points": [...],
-                  "Points needing improvement": [...]
-                }}
-              ]
-            }}
-            ```
+            **Your JSON format is automatically handled!**
             """)
         
         if st.button("🔄 Retry Loading Data"):
@@ -679,13 +663,52 @@ def main():
     
     st.sidebar.markdown("---")
     
+    # Show if positions have been modified
+    if st.session_state.positions_changed:
+        st.sidebar.warning("⚠️ Positions modified from defaults")
+        if st.sidebar.button("🔄 Reset to Default Positions"):
+            # Reset to original positions
+            import copy
+            st.session_state.saved_specs = {
+                "page1": {
+                    "date": {"x": 1.5, "y": 2.6, "w": 2.5, "h": 0.25, "font": 20},
+                    "age_gender": {"x": 2.2, "y": 3.0, "w": 3.0, "h": 0.25, "font": 16.1},
+                    "main_theme": {"x": 1.2, "y": 3.6, "w": 6.5, "h": 0.4, "font": 21},
+                    "case_summary": {"x": 0.8, "y": 4.3, "w": 7.0, "h": 1.5, "font": 18},
+                    "self_reflection_upper": {"x": 0.8, "y": 6.2, "w": 7.0, "h": 0.6, "font": 15},
+                    "self_reflection_lower": {"x": 0.8, "y": 7.0, "w": 7.0, "h": 1.0, "font": 15},
+                    "signature_mi": {"x": 0.8, "y": 9.8, "w": 3.0, "h": 0.3, "font": 24}
+                },
+                "page2": {
+                    "epa_row1": {"x": 0.6, "y": 1.8, "w": 1.8, "h": 0.35, "font": 14},
+                    "epa_row2": {"x": 0.6, "y": 2.4, "w": 1.8, "h": 0.35, "font": 14},
+                    "epa_row3": {"x": 0.6, "y": 3.0, "w": 1.8, "h": 0.35, "font": 14},
+                    "epa_row4": {"x": 0.6, "y": 3.6, "w": 1.8, "h": 0.35, "font": 14},
+                    "rubric_row1": {"x": 2.5, "y": 1.8, "w": 1.5, "h": 0.35, "font": 14},
+                    "rubric_row2": {"x": 2.5, "y": 2.4, "w": 1.5, "h": 0.35, "font": 14},
+                    "rubric_row3": {"x": 2.5, "y": 3.0, "w": 1.5, "h": 0.35, "font": 14},
+                    "rubric_row4": {"x": 2.5, "y": 3.6, "w": 1.5, "h": 0.35, "font": 14},
+                    "strength_row1": {"x": 4.1, "y": 1.8, "w": 1.8, "h": 0.35, "font": 12},
+                    "strength_row2": {"x": 4.1, "y": 2.4, "w": 1.8, "h": 0.35, "font": 12},
+                    "strength_row3": {"x": 4.1, "y": 3.0, "w": 1.8, "h": 0.35, "font": 12},
+                    "strength_row4": {"x": 4.1, "y": 3.6, "w": 1.8, "h": 0.35, "font": 12},
+                    "improve_row1": {"x": 6.0, "y": 1.8, "w": 1.8, "h": 0.35, "font": 12},
+                    "improve_row2": {"x": 6.0, "y": 2.4, "w": 1.8, "h": 0.35, "font": 12},
+                    "improve_row3": {"x": 6.0, "y": 3.0, "w": 1.8, "h": 0.35, "font": 12},
+                    "improve_row4": {"x": 6.0, "y": 3.6, "w": 1.8, "h": 0.35, "font": 12}
+                }
+            }
+            st.session_state.field_specs = copy.deepcopy(st.session_state.saved_specs)
+            st.session_state.positions_changed = False
+            st.rerun()
+    
     # Show loaded cases summary
     if cases_count > 0:
         st.sidebar.subheader("📊 Cases Summary")
         for i, case in enumerate(st.session_state.cases_data[:5]):
             case_id = case.get('case_id', f'Case {i+1}')
             date = case.get('date', 'No date')
-            st.sidebar.text(f"{i+1}. {date} - {case_id[:30]}")
+            st.sidebar.text(f"{i+1}. {date}")
         if cases_count > 5:
             st.sidebar.text(f"... and {cases_count - 5} more")
     
@@ -704,7 +727,7 @@ def main():
         
         with col_field:
             page_key = f"page{current_page}"
-            field_names = list(st.session_state.field_specs[page_key].keys())
+            field_names = list(st.session_state.saved_specs[page_key].keys() if 'saved_specs' in st.session_state else st.session_state.field_specs[page_key].keys())
             
             if (st.session_state.selected_field is None or 
                 st.session_state.selected_field not in field_names):
@@ -714,7 +737,7 @@ def main():
                 current_index = field_names.index(st.session_state.selected_field) if st.session_state.selected_field in field_names else 0
                 selected_field = st.selectbox("🎯 Select Field", field_names, 
                                             index=current_index,
-                                            key=f"field_selector_{current_page}")
+                                            key=f"field_selector_{current_page}_{st.session_state.selected_field}")
                 st.session_state.selected_field = selected_field
         
         if current_page in st.session_state.pdf_images:
@@ -723,47 +746,94 @@ def main():
             if fig:
                 st.plotly_chart(fig, use_container_width=True, key=f"plotly_fig_{current_page}")
                 
-                st.info("💡 **Tip:** Drag the colored rectangles to reposition fields. Fine-tune with sliders below.")
+                st.info("💡 **Tip:** Use sliders below to fine-tune positions. Changes are saved automatically!")
         
-        # Field adjustment controls
+        # Field adjustment controls with CALLBACKS to save changes
         st.subheader(f"📐 Fine-tune '{st.session_state.selected_field}' Position")
         
         if st.session_state.selected_field:
             page_key = f"page{current_page}"
-            spec = st.session_state.field_specs[page_key][st.session_state.selected_field]
             
-            field_key = f"{page_key}_{st.session_state.selected_field}"
+            # Use saved_specs if available
+            specs = st.session_state.saved_specs if 'saved_specs' in st.session_state else st.session_state.field_specs
+            spec = specs[page_key][st.session_state.selected_field]
+            
+            # Show current font size
+            st.info(f"📝 Font Size: **{spec['font']} pt** (Fixed per field type)")
             
             col_x, col_y = st.columns(2)
             with col_x:
-                new_x = st.slider("X Position (inches)", 0.0, 8.5, value=float(spec['x']), step=0.05, 
-                                key=f"x_{field_key}")
+                new_x = st.slider(
+                    "X Position (inches)", 
+                    0.0, 8.5, 
+                    value=float(spec['x']), 
+                    step=0.05,
+                    key=f"slider_x_{page_key}_{st.session_state.selected_field}",
+                    on_change=save_position_to_session,
+                    args=(page_key, st.session_state.selected_field, 'x', ),
+                    kwargs={'value': None}
+                )
+                # Save immediately
+                st.session_state.saved_specs[page_key][st.session_state.selected_field]['x'] = new_x
+                
             with col_y:
-                new_y = st.slider("Y Position (inches)", 0.0, 11.0, value=float(spec['y']), step=0.05,
-                                key=f"y_{field_key}")
+                new_y = st.slider(
+                    "Y Position (inches)", 
+                    0.0, 11.0, 
+                    value=float(spec['y']), 
+                    step=0.05,
+                    key=f"slider_y_{page_key}_{st.session_state.selected_field}",
+                    on_change=save_position_to_session,
+                    args=(page_key, st.session_state.selected_field, 'y', ),
+                    kwargs={'value': None}
+                )
+                # Save immediately
+                st.session_state.saved_specs[page_key][st.session_state.selected_field]['y'] = new_y
             
             col_w, col_h = st.columns(2)
             with col_w:
-                new_w = st.slider("Width (inches)", 0.1, 8.0, value=float(spec['w']), step=0.05,
-                                key=f"w_{field_key}")
+                new_w = st.slider(
+                    "Width (inches)", 
+                    0.1, 8.0, 
+                    value=float(spec['w']), 
+                    step=0.05,
+                    key=f"slider_w_{page_key}_{st.session_state.selected_field}",
+                    on_change=save_position_to_session,
+                    args=(page_key, st.session_state.selected_field, 'w', ),
+                    kwargs={'value': None}
+                )
+                # Save immediately
+                st.session_state.saved_specs[page_key][st.session_state.selected_field]['w'] = new_w
+                
             with col_h:
-                new_h = st.slider("Height (inches)", 0.1, 3.0, value=float(spec['h']), step=0.05,
-                                key=f"h_{field_key}")
+                new_h = st.slider(
+                    "Height (inches)", 
+                    0.1, 3.0, 
+                    value=float(spec['h']), 
+                    step=0.05,
+                    key=f"slider_h_{page_key}_{st.session_state.selected_field}",
+                    on_change=save_position_to_session,
+                    args=(page_key, st.session_state.selected_field, 'h', ),
+                    kwargs={'value': None}
+                )
+                # Save immediately
+                st.session_state.saved_specs[page_key][st.session_state.selected_field]['h'] = new_h
             
-            # UPDATE field specs immediately
-            st.session_state.field_specs[page_key][st.session_state.selected_field]['x'] = new_x
-            st.session_state.field_specs[page_key][st.session_state.selected_field]['y'] = new_y
-            st.session_state.field_specs[page_key][st.session_state.selected_field]['w'] = new_w
-            st.session_state.field_specs[page_key][st.session_state.selected_field]['h'] = new_h
+            # CRITICAL: Update saved_specs immediately with slider values
+            st.session_state.saved_specs[page_key][st.session_state.selected_field].update({
+                'x': new_x, 'y': new_y, 'w': new_w, 'h': new_h
+            })
+            st.session_state.positions_changed = True
             
-            st.success(f"📍 Position updated: X={new_x:.2f}\", Y={new_y:.2f}\", W={new_w:.2f}\", H={new_h:.2f}\"")
+            st.success(f"✅ Position saved: X={new_x:.2f}\", Y={new_y:.2f}\", W={new_w:.2f}\", H={new_h:.2f}\"")
     
     with col2:
         st.header("🎛️ Controls")
         
         if st.button("📊 Show All Coordinates", use_container_width=True):
             st.subheader("Current Coordinates")
-            for page_key, fields in st.session_state.field_specs.items():
+            specs = st.session_state.saved_specs if 'saved_specs' in st.session_state else st.session_state.field_specs
+            for page_key, fields in specs.items():
                 st.write(f"**{page_key.upper()}:**")
                 coord_data = []
                 for field_name, spec in fields.items():
@@ -775,7 +845,24 @@ def main():
                         'H': f"{spec['h']:.2f}\"",
                         'Font': f"{spec['font']}pt"
                     })
-                st.dataframe(coord_data, use_container_width=True)
+                st.dataframe(coord_data, use_container_width=True, height=250)
+        
+        st.markdown("---")
+        
+        # Font sizes display
+        st.subheader("📝 Font Sizes")
+        st.markdown("""
+        **Page 1:**
+        - Date: **20 pt**
+        - Age & Gender: **16.1 pt**
+        - Main Theme: **21 pt**
+        - Case Summary: **18 pt**
+        - Signature: **24 pt**
+        
+        **Page 2:**
+        - EPA/Rubric: **14 pt**
+        - Strengths/Improvements: **12 pt**
+        """)
         
         st.markdown("---")
         
@@ -800,7 +887,7 @@ def main():
                 except Exception as e:
                     st.error(f"Error previewing: {str(e)}")
             
-            # CRITICAL FIX: Generate SEPARATE PDFs for EACH case
+            # Generate PDFs with SAVED positions
             if st.button("🚀 Fill All Forms", type="primary", use_container_width=True):
                 
                 progress_bar = st.progress(0)
@@ -824,11 +911,10 @@ def main():
                         progress_bar.progress((i + 1) / cases_count)
                         
                         try:
-                            # Create filled PDF for THIS specific case
+                            # Create filled PDF using SAVED positions
                             filled_pdf = create_filled_pdf(case, st.session_state.pdf_bytes, st.session_state.font_bytes)
                             
                             if filled_pdf:
-                                # Store with UNIQUE filename for EACH case
                                 filename = f"{case_id}_filled.pdf"
                                 filled_pdfs[filename] = filled_pdf
                             else:
@@ -857,7 +943,7 @@ def main():
                             st.success(f"🎉 Successfully processed all {len(filled_pdfs)} forms!")
                             st.balloons()
                         
-                        # Download button for ZIP containing ALL PDFs
+                        # Download button
                         st.download_button(
                             label=f"📥 Download {len(filled_pdfs)} Filled Forms (ZIP)",
                             data=zip_buffer.getvalue(),
@@ -888,17 +974,10 @@ def main():
         st.markdown("---")
         st.subheader("📋 Instructions")
         st.markdown("""
-        **Field Positioning:**
-        1. Select page and field
-        2. Use sliders to adjust position
-        3. Changes apply immediately
-        
-        **Processing:**
-        1. Adjust fields if needed
-        2. Click "Fill All Forms"
-        3. Download ZIP with all PDFs
-        
-        **Your JSON format is automatically handled!**
+        **✅ CHANGES NOW PERSIST!**
+        - Position changes are saved automatically
+        - Font sizes are fixed per field type
+        - All 5 PDFs will use your custom positions
         """)
 
 if __name__ == "__main__":

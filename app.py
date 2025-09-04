@@ -67,17 +67,21 @@ DEFAULT_SPECS = {
 def initialize_session_state():
     """Initialize session state with proper separation of saved and draft states"""
     
-    # SAVED positions - these are the committed positions used for PDF generation
-    if 'saved_positions' not in st.session_state:
-        st.session_state.saved_positions = copy.deepcopy(DEFAULT_SPECS)
+    # PERMANENT saved positions - these persist and are used for PDF generation
+    if 'permanent_saved_positions' not in st.session_state:
+        st.session_state.permanent_saved_positions = copy.deepcopy(DEFAULT_SPECS)
     
-    # DRAFT positions - these are the working positions being edited
-    if 'draft_positions' not in st.session_state:
-        st.session_state.draft_positions = copy.deepcopy(st.session_state.saved_positions)
+    # WORKING positions - these are being actively edited via sliders
+    if 'working_positions' not in st.session_state:
+        st.session_state.working_positions = copy.deepcopy(st.session_state.permanent_saved_positions)
     
-    # Track unsaved changes per page
-    if 'unsaved_changes' not in st.session_state:
-        st.session_state.unsaved_changes = {"page1": False, "page2": False}
+    # Track if working positions differ from saved
+    if 'has_unsaved_changes' not in st.session_state:
+        st.session_state.has_unsaved_changes = {"page1": False, "page2": False}
+    
+    # Track current slider values explicitly
+    if 'current_slider_values' not in st.session_state:
+        st.session_state.current_slider_values = {}
     
     # Initialize other session state variables
     for key, default in [
@@ -89,43 +93,57 @@ def initialize_session_state():
         ('pdf_bytes', None),
         ('font_bytes', None),
         ('loading_error', None),
-        ('positions_modified', False),  # Track if positions differ from defaults
-        ('show_save_confirmation', {"page1": False, "page2": False})
+        ('show_success_message', None),
+        ('last_action', None)
     ]:
         if key not in st.session_state:
             st.session_state[key] = default
 
-def check_if_modified():
-    """Check if saved positions differ from defaults"""
-    for page_key in ['page1', 'page2']:
-        for field_name, spec in st.session_state.saved_positions[page_key].items():
-            default_spec = DEFAULT_SPECS[page_key][field_name]
-            if (abs(spec['x'] - default_spec['x']) > 0.01 or 
-                abs(spec['y'] - default_spec['y']) > 0.01 or
-                abs(spec['w'] - default_spec['w']) > 0.01 or
-                abs(spec['h'] - default_spec['h']) > 0.01):
-                return True
+def positions_differ(pos1, pos2):
+    """Check if two position specs differ"""
+    for key in ['x', 'y', 'w', 'h']:
+        if abs(pos1[key] - pos2[key]) > 0.001:
+            return True
     return False
 
-def save_current_page_positions(page_num):
-    """Save draft positions for the current page to saved positions"""
-    page_key = f"page{page_num}"
-    st.session_state.saved_positions[page_key] = copy.deepcopy(st.session_state.draft_positions[page_key])
-    st.session_state.unsaved_changes[page_key] = False
-    st.session_state.show_save_confirmation[page_key] = True
-    st.session_state.positions_modified = check_if_modified()
+def check_for_changes(page_key):
+    """Check if working positions differ from saved for a specific page"""
+    working = st.session_state.working_positions[page_key]
+    saved = st.session_state.permanent_saved_positions[page_key]
+    
+    for field_name in working:
+        if positions_differ(working[field_name], saved[field_name]):
+            return True
+    return False
+
+def update_working_position(page_key, field_name, coord_type, value):
+    """Update working position and mark page as having changes"""
+    # Update the working position
+    old_value = st.session_state.working_positions[page_key][field_name][coord_type]
+    if abs(old_value - value) > 0.001:  # Only update if actually changed
+        st.session_state.working_positions[page_key][field_name][coord_type] = value
+        st.session_state.has_unsaved_changes[page_key] = check_for_changes(page_key)
+        
+        # Store in current slider values
+        key = f"{page_key}_{field_name}_{coord_type}"
+        st.session_state.current_slider_values[key] = value
+
+def save_page_positions(page_key):
+    """Commit working positions to permanent saved positions for a page"""
+    st.session_state.permanent_saved_positions[page_key] = copy.deepcopy(
+        st.session_state.working_positions[page_key]
+    )
+    st.session_state.has_unsaved_changes[page_key] = False
+    st.session_state.show_success_message = f"Page {page_key[-1]} positions saved successfully!"
+    st.session_state.last_action = f"save_{page_key}"
 
 def reset_all_positions():
     """Reset all positions to defaults"""
-    st.session_state.saved_positions = copy.deepcopy(DEFAULT_SPECS)
-    st.session_state.draft_positions = copy.deepcopy(DEFAULT_SPECS)
-    st.session_state.unsaved_changes = {"page1": False, "page2": False}
-    st.session_state.positions_modified = False
-
-def update_draft_position(page_key, field_name, coord_type, value):
-    """Update draft position and mark as having unsaved changes"""
-    st.session_state.draft_positions[page_key][field_name][coord_type] = value
-    st.session_state.unsaved_changes[page_key] = True
+    st.session_state.permanent_saved_positions = copy.deepcopy(DEFAULT_SPECS)
+    st.session_state.working_positions = copy.deepcopy(DEFAULT_SPECS)
+    st.session_state.has_unsaved_changes = {"page1": False, "page2": False}
+    st.session_state.current_slider_values = {}
+    st.session_state.show_success_message = "All positions reset to defaults!"
 
 @st.cache_data
 def load_pdf_as_images(pdf_bytes):
@@ -153,15 +171,11 @@ def transform_case_format(original_case):
     """Transform case from user's format to expected format"""
     transformed = {}
     
-    # Map Date -> date
     if 'Date' in original_case:
         transformed['date'] = original_case['Date']
     
-    # Parse "Age & Gender" into combined field
     if 'Age & Gender' in original_case:
         transformed['age_gender'] = original_case['Age & Gender']
-        
-        # Also extract separate fields for compatibility
         age_gender = original_case['Age & Gender']
         age_match = re.search(r'(\d+)', age_gender)
         if age_match:
@@ -177,7 +191,6 @@ def transform_case_format(original_case):
         else:
             transformed['gender'] = ''
     
-    # Map field names
     field_mappings = {
         'Main theme of the case': 'main_theme',
         'Case Summary': 'case_summary',
@@ -188,7 +201,6 @@ def transform_case_format(original_case):
         if old_key in original_case:
             transformed[new_key] = original_case[old_key]
     
-    # Handle Self Reflection
     if 'Self Reflection' in original_case:
         reflection_text = original_case['Self Reflection']
         transformed['self_reflection'] = {}
@@ -208,7 +220,6 @@ def transform_case_format(original_case):
             transformed['self_reflection']['what_did_right'] = reflection_text
             transformed['self_reflection']['needs_development'] = ''
     
-    # Handle EPA assessment
     transformed['epa_assessment'] = {}
     
     if 'EPA tested' in original_case:
@@ -227,7 +238,6 @@ def transform_case_format(original_case):
     if 'Points needing improvement' in original_case:
         transformed['epa_assessment']['points_needing_improvement'] = original_case['Points needing improvement'] if isinstance(original_case['Points needing improvement'], list) else []
     
-    # Generate a case_id if not present
     if 'case_id' not in transformed:
         date_part = transformed.get('date', '').replace('-', '')
         theme_part = transformed.get('main_theme', 'case')[:20].replace(' ', '_').replace('/', '_')
@@ -236,15 +246,14 @@ def transform_case_format(original_case):
     return transformed
 
 def load_input_data():
-    """Load all required data from the input folder automatically"""
-    
+    """Load all required data from the input folder"""
     if not os.path.exists(INPUT_FOLDER):
         st.session_state.loading_error = f"❌ Input folder not found at: {INPUT_FOLDER}"
         return False
     
     errors = []
     
-    # Load PDF file
+    # Load PDF
     pdf_path = os.path.join(INPUT_FOLDER, PDF_FILE)
     if not os.path.exists(pdf_path):
         errors.append(f"• Missing: {PDF_FILE}")
@@ -258,7 +267,7 @@ def load_input_data():
         except Exception as e:
             errors.append(f"• Error loading {PDF_FILE}: {str(e)}")
     
-    # Load cases data
+    # Load cases
     cases_path = os.path.join(INPUT_FOLDER, CASES_FILE)
     if not os.path.exists(cases_path):
         errors.append(f"• Missing: {CASES_FILE}")
@@ -267,7 +276,6 @@ def load_input_data():
             with open(cases_path, 'r', encoding='utf-8') as f:
                 loaded_data = json.load(f)
             
-            # Handle object with "cases" array
             if isinstance(loaded_data, dict) and 'cases' in loaded_data:
                 cases_array = loaded_data['cases']
                 if isinstance(cases_array, list):
@@ -283,8 +291,6 @@ def load_input_data():
                 else:
                     errors.append(f"• 'cases' property is not an array")
                     st.session_state.cases_data = []
-            
-            # Handle direct array format
             elif isinstance(loaded_data, list):
                 valid_cases = []
                 for i, case in enumerate(loaded_data):
@@ -301,15 +307,11 @@ def load_input_data():
             else:
                 errors.append(f"• {CASES_FILE} must contain JSON array or object with 'cases' array")
                 st.session_state.cases_data = []
-                
-        except json.JSONDecodeError as e:
-            errors.append(f"• Invalid JSON in {CASES_FILE}: {str(e)}")
-            st.session_state.cases_data = []
         except Exception as e:
             errors.append(f"• Error loading {CASES_FILE}: {str(e)}")
             st.session_state.cases_data = []
     
-    # Load font (optional)
+    # Load font
     font_path = os.path.join(INPUT_FOLDER, FONT_FILE)
     if os.path.exists(font_path):
         try:
@@ -329,8 +331,8 @@ def load_input_data():
 def inches_to_pixels(inches, dpi=150):
     return int(inches * dpi)
 
-def create_interactive_plotly_figure(page_num):
-    """Create interactive Plotly figure with draggable rectangles"""
+def create_visual_preview(page_num):
+    """Create NON-DRAGGABLE visual preview with current positions"""
     if page_num not in st.session_state.pdf_images:
         return None
     
@@ -360,8 +362,8 @@ def create_interactive_plotly_figure(page_num):
     colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan',
               'magenta', 'yellow', 'lime', 'navy', 'teal', 'silver', 'maroon', 'fuchsia', 'aqua', 'black']
     
-    # Use DRAFT positions for display
-    for i, (field_name, spec) in enumerate(st.session_state.draft_positions[page_key].items()):
+    # Use WORKING positions for real-time preview
+    for i, (field_name, spec) in enumerate(st.session_state.working_positions[page_key].items()):
         x_px = inches_to_pixels(spec['x'])
         y_px = img_height - inches_to_pixels(spec['y'] + spec['h'])
         w_px = inches_to_pixels(spec['w'])
@@ -371,12 +373,13 @@ def create_interactive_plotly_figure(page_num):
         
         if field_name == st.session_state.selected_field:
             color = 'lime'
-            opacity = 0.6
-            line_width = 4
+            opacity = 0.5
+            line_width = 3
         else:
             opacity = 0.3
             line_width = 2
         
+        # NON-DRAGGABLE rectangles (editable=False)
         fig.add_shape(
             type="rect",
             x0=x_px, y0=y_px,
@@ -384,32 +387,32 @@ def create_interactive_plotly_figure(page_num):
             line=dict(color=color, width=line_width),
             fillcolor=color,
             opacity=opacity,
-            editable=True,
+            editable=False,  # CRITICAL: Not draggable
             name=field_name,
             layer="above"
         )
         
-        # Show font size in annotation
-        font_size = spec['font']
+        # Field label
         fig.add_annotation(
             x=x_px + w_px/2,
             y=y_px + h_px/2,
-            text=f"{field_name}<br>Font: {font_size}pt",
+            text=f"<b>{field_name}</b><br>Font: {spec['font']}pt",
             showarrow=False,
-            font=dict(size=10, color="white" if field_name == st.session_state.selected_field else "black"),
-            bgcolor="black" if field_name == st.session_state.selected_field else "white",
-            opacity=0.8,
+            font=dict(size=9, color="white" if field_name == st.session_state.selected_field else "black"),
+            bgcolor="rgba(0,0,0,0.7)" if field_name == st.session_state.selected_field else "rgba(255,255,255,0.7)",
+            opacity=0.9,
             bordercolor="white",
             borderwidth=1
         )
     
-    # Add indicator for unsaved changes
-    title_suffix = " (UNSAVED CHANGES)" if st.session_state.unsaved_changes[page_key] else ""
+    # Status indicator
+    status = "⚠️ UNSAVED CHANGES" if st.session_state.has_unsaved_changes[page_key] else "✅ SAVED"
+    status_color = "orange" if st.session_state.has_unsaved_changes[page_key] else "green"
     
     fig.update_layout(
         title=dict(
-            text=f"🎯 Page {page_num} - Interactive Field Positioning{title_suffix}<br>" +
-                 f"<sub>Drag rectangles to reposition fields. Green = selected field.</sub>",
+            text=f"📄 Page {page_num} Preview - {status}<br>" +
+                 f"<sub>Use sliders below to adjust positions. Boxes update in real-time.</sub>",
             x=0.5,
             font=dict(size=16)
         ),
@@ -418,7 +421,7 @@ def create_interactive_plotly_figure(page_num):
             showgrid=False,
             zeroline=False,
             showticklabels=False,
-            fixedrange=False
+            fixedrange=True  # No zoom/pan
         ),
         yaxis=dict(
             range=[0, img_height],
@@ -427,24 +430,21 @@ def create_interactive_plotly_figure(page_num):
             showticklabels=False,
             scaleanchor="x",
             scaleratio=1,
-            fixedrange=False
+            fixedrange=True  # No zoom/pan
         ),
         width=900,
         height=1100,
         margin=dict(l=20, r=20, t=80, b=20),
         showlegend=False,
-        dragmode='pan'
+        dragmode=False  # Disable all dragging
     )
-    
-    fig.update_shapes(dict(editable=True))
     
     return fig
 
 def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
-    """Create filled PDF using SAVED positions (not draft)"""
+    """Create filled PDF using PERMANENT saved positions"""
     try:
         if not isinstance(case_data, dict):
-            st.error(f"Invalid case data type: {type(case_data).__name__}")
             return None
             
         overlay_buffer = BytesIO()
@@ -457,7 +457,7 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
         c = canvas.Canvas(overlay_buffer, pagesize=(page_width, page_height))
         
         # Setup font
-        font_color = Color(0.102, 0.227, 0.486)  # Blue color
+        font_color = Color(0.102, 0.227, 0.486)
         font_name = 'Helvetica'
         
         if font_bytes:
@@ -473,7 +473,6 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
                 pass
         
         def draw_text(text, spec, page_height):
-            """Draw text using saved positions and font sizes"""
             if not text:
                 return
             
@@ -481,17 +480,14 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
             if not text:
                 return
             
-            # Use positions from spec (which comes from saved_positions)
             x_pts = spec['x'] * 72
             y_pts = (page_height/72 - spec['y'] - spec['h']/2) * 72
             w_pts = spec['w'] * 72
             
-            # Use the font size from the spec
             font_size = spec['font']
             c.setFont(font_name, font_size)
             c.setFillColor(font_color)
             
-            # Handle long text with wrapping
             if len(text) > 50 and spec['h'] > 0.5:
                 words = text.split()
                 lines = []
@@ -511,7 +507,6 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
                 if current_line:
                     lines.append(current_line)
                 
-                # Draw multiple lines
                 line_height = font_size + 2
                 start_y = y_pts + (len(lines) - 1) * line_height / 2
                 
@@ -519,18 +514,16 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
                     c.drawString(x_pts + 5, start_y, line)
                     start_y -= line_height
             else:
-                # Single line
                 c.drawString(x_pts + 5, y_pts, text)
         
-        # CRITICAL: Always use saved_positions for PDF generation
-        saved_specs = st.session_state.saved_positions
+        # Use PERMANENT saved positions
+        saved_specs = st.session_state.permanent_saved_positions
         
-        # FILL PAGE 1
+        # Page 1
         page1_specs = saved_specs['page1']
         
         draw_text(case_data.get('date', ''), page1_specs['date'], page_height)
         
-        # Age & Gender
         if 'age_gender' in case_data:
             draw_text(case_data['age_gender'], page1_specs['age_gender'], page_height)
         else:
@@ -540,7 +533,6 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
         draw_text(case_data.get('main_theme', ''), page1_specs['main_theme'], page_height)
         draw_text(case_data.get('case_summary', ''), page1_specs['case_summary'], page_height)
         
-        # Self Reflection
         reflection = case_data.get('self_reflection', {})
         if isinstance(reflection, dict):
             draw_text(reflection.get('what_did_right', ''), page1_specs['self_reflection_upper'], page_height)
@@ -548,7 +540,7 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
         
         draw_text(case_data.get('signature_mi', ''), page1_specs['signature_mi'], page_height)
         
-        # PAGE 2
+        # Page 2
         c.showPage()
         page2_specs = saved_specs['page2']
         epa_data = case_data.get('epa_assessment', {})
@@ -559,13 +551,11 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
             strengths = epa_data.get('strength_points', [])
             improvements = epa_data.get('points_needing_improvement', [])
             
-            # Ensure all are lists
             epas = epas if isinstance(epas, list) else []
             rubrics = rubrics if isinstance(rubrics, list) else []
             strengths = strengths if isinstance(strengths, list) else []
             improvements = improvements if isinstance(improvements, list) else []
             
-            # Fill table
             for i in range(min(4, max(len(epas), len(rubrics), len(strengths), len(improvements)))):
                 row_num = i + 1
                 
@@ -584,7 +574,7 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
         c.save()
         overlay_buffer.seek(0)
         
-        # Merge with original PDF
+        # Merge
         original_pdf = PdfReader(BytesIO(pdf_bytes))
         overlay_pdf = PdfReader(overlay_buffer)
         writer = PdfWriter()
@@ -603,12 +593,10 @@ def create_filled_pdf(case_data, pdf_bytes, font_bytes=None):
         
     except Exception as e:
         st.error(f"Error creating PDF: {str(e)}")
-        import traceback
-        st.error(traceback.format_exc())
         return None
 
 def main():
-    """Main application"""
+    """Main application with real-time slider positioning"""
     
     initialize_session_state()
     
@@ -617,15 +605,14 @@ def main():
             load_input_data()
     
     st.title("📋 PDF Medical Form Filler")
-    st.markdown("*Interactive field positioning with custom font sizes*")
+    st.markdown("*Precision field positioning with real-time preview*")
     
+    # Error handling
     if st.session_state.loading_error:
         st.error(st.session_state.loading_error)
-        
         with st.expander("📁 **Setup Instructions**", expanded=True):
             st.markdown(f"""
             **Required files in `/input` folder:**
-            
             ```
             {INPUT_FOLDER}/
             ├── {PDF_FILE}          # Your blank PDF form template
@@ -633,24 +620,22 @@ def main():
             └── {FONT_FILE}  # Custom font (optional)
             ```
             """)
-        
         if st.button("🔄 Retry Loading Data"):
             st.session_state.data_loaded = False
             st.session_state.loading_error = None
             st.session_state.cases_data = []
             st.rerun()
-        
         return
     
-    # Show data status
-    st.sidebar.header("📁 Loaded Data")
-    st.sidebar.success(f"✅ PDF Template: {PDF_FILE}")
+    # Sidebar
+    st.sidebar.header("📁 Data Status")
+    st.sidebar.success(f"✅ PDF: {PDF_FILE}")
     
     cases_count = len(st.session_state.cases_data) if isinstance(st.session_state.cases_data, list) else 0
     st.sidebar.success(f"✅ Cases: {cases_count} loaded")
     
     if st.session_state.font_bytes:
-        st.sidebar.success(f"✅ Custom Font: {FONT_FILE}")
+        st.sidebar.success(f"✅ Font: {FONT_FILE}")
     else:
         st.sidebar.info(f"ℹ️ Using default font")
     
@@ -659,335 +644,298 @@ def main():
     # Position Status
     st.sidebar.header("📍 Position Status")
     
-    # Check for unsaved changes
-    has_unsaved = st.session_state.unsaved_changes["page1"] or st.session_state.unsaved_changes["page2"]
+    page1_changed = st.session_state.has_unsaved_changes["page1"]
+    page2_changed = st.session_state.has_unsaved_changes["page2"]
     
-    if has_unsaved:
-        st.sidebar.error("❗ You have unsaved changes!")
-        if st.session_state.unsaved_changes["page1"]:
-            st.sidebar.warning("• Page 1 has unsaved changes")
-        if st.session_state.unsaved_changes["page2"]:
-            st.sidebar.warning("• Page 2 has unsaved changes")
+    if page1_changed or page2_changed:
+        st.sidebar.error("⚠️ **Unsaved Changes**")
+        if page1_changed:
+            st.sidebar.warning("• Page 1 modified")
+        if page2_changed:
+            st.sidebar.warning("• Page 2 modified")
+        st.sidebar.info("💡 Click SAVE to commit changes")
     else:
         st.sidebar.success("✅ All changes saved")
     
-    if st.session_state.positions_modified:
-        st.sidebar.info("📝 Positions modified from defaults")
-    
     # Reset button
-    if st.sidebar.button("🔄 Reset ALL to Default Positions", use_container_width=True):
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🔄 Reset All to Defaults", type="secondary", use_container_width=True):
         reset_all_positions()
         st.rerun()
     
-    st.sidebar.markdown("---")
-    
-    # Show loaded cases summary
+    # Cases summary
     if cases_count > 0:
-        st.sidebar.subheader("📊 Cases Summary")
-        for i, case in enumerate(st.session_state.cases_data[:5]):
-            case_id = case.get('case_id', f'Case {i+1}')
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("📊 Cases")
+        for i, case in enumerate(st.session_state.cases_data[:3]):
             date = case.get('date', 'No date')
             st.sidebar.text(f"{i+1}. {date}")
-        if cases_count > 5:
-            st.sidebar.text(f"... and {cases_count - 5} more")
+        if cases_count > 3:
+            st.sidebar.text(f"... +{cases_count - 3} more")
     
-    # Main interface
+    # Main content
     col1, col2 = st.columns([3, 1])
     
     with col1:
-        st.header("🎯 Interactive Field Positioning")
+        st.header("🎯 Field Positioning Control")
         
-        # Show save confirmation messages
-        if st.session_state.show_save_confirmation["page1"]:
-            st.success("✅ Page 1 positions saved successfully!")
-            st.session_state.show_save_confirmation["page1"] = False
-            
-        if st.session_state.show_save_confirmation["page2"]:
-            st.success("✅ Page 2 positions saved successfully!")
-            st.session_state.show_save_confirmation["page2"] = False
+        # Success message
+        if st.session_state.show_success_message:
+            st.success(f"✅ {st.session_state.show_success_message}")
+            st.session_state.show_success_message = None
         
-        col_page, col_field = st.columns([1, 2])
+        # Instructions
+        st.info("📌 **How to position fields:** Use the sliders below to adjust field positions. The preview updates in real-time. Click SAVE when satisfied with the positions.")
+        
+        # Page selection
+        col_page, col_field, col_save = st.columns([1, 2, 1])
         
         with col_page:
-            page_option = st.selectbox("📄 Select Page", ["Page 1", "Page 2"])
+            page_option = st.selectbox("📄 Page", ["Page 1", "Page 2"], key="page_selector")
             current_page = 1 if page_option == "Page 1" else 2
             st.session_state.current_page = current_page
         
         with col_field:
             page_key = f"page{current_page}"
-            field_names = list(st.session_state.draft_positions[page_key].keys())
+            field_names = list(st.session_state.working_positions[page_key].keys())
             
-            if (st.session_state.selected_field is None or 
-                st.session_state.selected_field not in field_names):
+            if st.session_state.selected_field not in field_names:
                 st.session_state.selected_field = field_names[0] if field_names else None
             
             if field_names:
-                current_index = field_names.index(st.session_state.selected_field) if st.session_state.selected_field in field_names else 0
-                selected_field = st.selectbox("🎯 Select Field", field_names, 
-                                            index=current_index,
-                                            key=f"field_selector_{current_page}")
+                selected_field = st.selectbox(
+                    "🎯 Field", 
+                    field_names,
+                    index=field_names.index(st.session_state.selected_field) if st.session_state.selected_field in field_names else 0,
+                    key="field_selector"
+                )
                 st.session_state.selected_field = selected_field
         
-        # SAVE BUTTON for current page
-        col_save, col_status = st.columns([1, 2])
         with col_save:
             page_key = f"page{current_page}"
-            if st.session_state.unsaved_changes[page_key]:
-                if st.button(f"💾 **SAVE Page {current_page} Positions**", 
-                           type="primary", 
-                           use_container_width=True,
-                           help="Save all position changes for this page"):
-                    save_current_page_positions(current_page)
-                    st.rerun()
-            else:
-                st.button(f"✅ Page {current_page} Saved", 
-                         use_container_width=True, 
-                         disabled=True,
-                         help="No changes to save")
-        
-        with col_status:
-            if st.session_state.unsaved_changes[page_key]:
-                st.warning(f"⚠️ Page {current_page} has unsaved changes. Click SAVE to apply them to PDFs.")
-            else:
-                st.info(f"✅ Page {current_page} positions are saved and will be used for PDF generation.")
-        
-        if current_page in st.session_state.pdf_images:
-            fig = create_interactive_plotly_figure(current_page)
+            has_changes = st.session_state.has_unsaved_changes[page_key]
             
-            if fig:
-                st.plotly_chart(fig, use_container_width=True, key=f"plotly_fig_{current_page}")
-                
-                st.info("💡 **Tip:** Adjust positions with sliders below. Remember to SAVE before switching pages or generating PDFs!")
+            if st.button(
+                f"💾 **SAVE PAGE {current_page}**" if has_changes else f"✅ Page {current_page} Saved",
+                type="primary" if has_changes else "secondary",
+                disabled=not has_changes,
+                use_container_width=True,
+                key=f"save_button_{current_page}"
+            ):
+                save_page_positions(page_key)
+                st.rerun()
         
-        # Field adjustment controls
-        st.subheader(f"📐 Fine-tune '{st.session_state.selected_field}' Position")
+        # Visual Preview
+        if current_page in st.session_state.pdf_images:
+            fig = create_visual_preview(current_page)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True, key=f"preview_{current_page}")
+        
+        # Position Controls
+        st.subheader(f"⚙️ Adjust '{st.session_state.selected_field}' Position")
         
         if st.session_state.selected_field:
             page_key = f"page{current_page}"
-            spec = st.session_state.draft_positions[page_key][st.session_state.selected_field]
+            field_name = st.session_state.selected_field
+            spec = st.session_state.working_positions[page_key][field_name]
             
-            # Show current font size
-            st.info(f"📝 Font Size: **{spec['font']} pt** (Fixed per field type)")
+            # Display font size
+            st.markdown(f"**Font Size:** {spec['font']} pt (fixed)")
             
+            # Create unique keys for sliders
+            slider_key_x = f"x_{page_key}_{field_name}"
+            slider_key_y = f"y_{page_key}_{field_name}"
+            slider_key_w = f"w_{page_key}_{field_name}"
+            slider_key_h = f"h_{page_key}_{field_name}"
+            
+            # Position sliders with real-time updates
             col_x, col_y = st.columns(2)
             with col_x:
                 new_x = st.slider(
-                    "X Position (inches)", 
-                    0.0, 8.5, 
-                    value=float(spec['x']), 
+                    "↔️ X Position (inches)",
+                    0.0, 8.5,
+                    value=float(spec['x']),
                     step=0.05,
-                    key=f"slider_x_{page_key}_{st.session_state.selected_field}"
+                    format="%.2f",
+                    key=slider_key_x,
+                    help="Horizontal position from left edge"
                 )
                 if new_x != spec['x']:
-                    update_draft_position(page_key, st.session_state.selected_field, 'x', new_x)
-                
+                    update_working_position(page_key, field_name, 'x', new_x)
+                    st.rerun()
+            
             with col_y:
                 new_y = st.slider(
-                    "Y Position (inches)", 
-                    0.0, 11.0, 
-                    value=float(spec['y']), 
+                    "↕️ Y Position (inches)",
+                    0.0, 11.0,
+                    value=float(spec['y']),
                     step=0.05,
-                    key=f"slider_y_{page_key}_{st.session_state.selected_field}"
+                    format="%.2f",
+                    key=slider_key_y,
+                    help="Vertical position from top edge"
                 )
                 if new_y != spec['y']:
-                    update_draft_position(page_key, st.session_state.selected_field, 'y', new_y)
+                    update_working_position(page_key, field_name, 'y', new_y)
+                    st.rerun()
             
             col_w, col_h = st.columns(2)
             with col_w:
                 new_w = st.slider(
-                    "Width (inches)", 
-                    0.1, 8.0, 
-                    value=float(spec['w']), 
+                    "📐 Width (inches)",
+                    0.1, 8.0,
+                    value=float(spec['w']),
                     step=0.05,
-                    key=f"slider_w_{page_key}_{st.session_state.selected_field}"
+                    format="%.2f",
+                    key=slider_key_w,
+                    help="Field width"
                 )
                 if new_w != spec['w']:
-                    update_draft_position(page_key, st.session_state.selected_field, 'w', new_w)
-                
+                    update_working_position(page_key, field_name, 'w', new_w)
+                    st.rerun()
+            
             with col_h:
                 new_h = st.slider(
-                    "Height (inches)", 
-                    0.1, 3.0, 
-                    value=float(spec['h']), 
+                    "📏 Height (inches)",
+                    0.1, 3.0,
+                    value=float(spec['h']),
                     step=0.05,
-                    key=f"slider_h_{page_key}_{st.session_state.selected_field}"
+                    format="%.2f",
+                    key=slider_key_h,
+                    help="Field height"
                 )
                 if new_h != spec['h']:
-                    update_draft_position(page_key, st.session_state.selected_field, 'h', new_h)
+                    update_working_position(page_key, field_name, 'h', new_h)
+                    st.rerun()
             
-            if st.session_state.unsaved_changes[page_key]:
-                st.warning(f"📌 Position changed: X={new_x:.2f}\", Y={new_y:.2f}\", W={new_w:.2f}\", H={new_h:.2f}\" (UNSAVED)")
+            # Status display
+            if st.session_state.has_unsaved_changes[page_key]:
+                st.warning(f"⚠️ Position changed - remember to SAVE")
             else:
-                st.success(f"✅ Current saved position: X={new_x:.2f}\", Y={new_y:.2f}\", W={new_w:.2f}\", H={new_h:.2f}\"")
+                st.success(f"✅ Position saved")
     
     with col2:
-        st.header("🎛️ Controls")
+        st.header("🎛️ Tools")
         
-        # Show current coordinates
-        if st.button("📊 Show Current Coordinates", use_container_width=True):
-            st.subheader("Saved Coordinates")
-            for page_key, fields in st.session_state.saved_positions.items():
-                st.write(f"**{page_key.upper()}:**")
-                coord_data = []
-                for field_name, spec in fields.items():
-                    coord_data.append({
-                        'Field': field_name.replace('_', ' ').title(),
-                        'X': f"{spec['x']:.2f}\"",
-                        'Y': f"{spec['y']:.2f}\"", 
-                        'W': f"{spec['w']:.2f}\"",
-                        'H': f"{spec['h']:.2f}\"",
-                        'Font': f"{spec['font']}pt"
+        # Quick Actions
+        st.subheader("Quick Actions")
+        
+        if st.button("📋 Show All Positions", use_container_width=True):
+            st.subheader("Saved Positions")
+            for pk, fields in st.session_state.permanent_saved_positions.items():
+                st.write(f"**{pk.upper()}:**")
+                data = []
+                for fn, sp in fields.items():
+                    data.append({
+                        'Field': fn.replace('_', ' ').title(),
+                        'X': f"{sp['x']:.2f}\"",
+                        'Y': f"{sp['y']:.2f}\"",
+                        'W': f"{sp['w']:.2f}\"",
+                        'H': f"{sp['h']:.2f}\"",
+                        'Font': f"{sp['font']}pt"
                     })
-                st.dataframe(coord_data, use_container_width=True, height=250)
+                st.dataframe(data, use_container_width=True, height=200)
         
         st.markdown("---")
         
-        # Font sizes display
-        st.subheader("📝 Font Sizes")
-        st.markdown("""
-        **Page 1:**
-        - Date: **20 pt**
-        - Age & Gender: **16.1 pt**
-        - Main Theme: **21 pt**
-        - Case Summary: **18 pt**
-        - Signature: **24 pt**
+        # Generate PDFs
+        st.subheader("📄 Generate PDFs")
         
-        **Page 2:**
-        - EPA/Rubric: **14 pt**
-        - Strengths/Improvements: **12 pt**
-        """)
+        st.write(f"**Cases:** {cases_count}")
         
-        st.markdown("---")
+        # Check for unsaved changes
+        has_any_unsaved = page1_changed or page2_changed
         
-        st.subheader("📄 Process Forms")
+        if has_any_unsaved:
+            st.error("💾 Save all changes first!")
         
-        st.write(f"**📊 Cases to process:** {cases_count}")
-        
-        # Warning if there are unsaved changes
-        if has_unsaved:
-            st.error("❗ Save all changes before generating PDFs!")
-        
-        if cases_count == 0:
-            st.warning("No valid cases found")
-        else:
-            # Preview first case
-            if st.button("👁️ Preview First Case", use_container_width=True):
-                try:
-                    if st.session_state.cases_data and len(st.session_state.cases_data) > 0:
-                        first_case = st.session_state.cases_data[0]
-                        if isinstance(first_case, dict):
-                            st.json(first_case)
-                        else:
-                            st.error(f"First case is invalid: {type(first_case).__name__}")
-                    else:
-                        st.warning("No cases available")
-                except Exception as e:
-                    st.error(f"Error previewing: {str(e)}")
-            
-            # Generate PDFs
-            button_disabled = has_unsaved
-            button_type = "secondary" if has_unsaved else "primary"
-            
-            if st.button("🚀 Fill All Forms", 
-                        type=button_type, 
-                        use_container_width=True,
-                        disabled=button_disabled,
-                        help="Save all changes first" if has_unsaved else "Generate PDFs with saved positions"):
+        if cases_count > 0:
+            if st.button(
+                "🚀 Generate All PDFs",
+                type="primary" if not has_any_unsaved else "secondary",
+                disabled=has_any_unsaved,
+                use_container_width=True,
+                help="Save all changes first" if has_any_unsaved else "Generate PDFs with saved positions"
+            ):
+                progress_bar = st.progress(0)
+                status_text = st.empty()
                 
-                if not has_unsaved:  # Double-check
-                    progress_bar = st.progress(0)
-                    status_container = st.container()
-                    
-                    filled_pdfs = {}
-                    failed_cases = []
-                    
-                    try:
-                        # Process each case
-                        for i, case in enumerate(st.session_state.cases_data):
-                            if not isinstance(case, dict):
-                                failed_cases.append(f"Case {i+1}: Invalid type")
-                                continue
-                            
-                            case_id = case.get('case_id', f'case_{i+1:03d}')
-                            
-                            with status_container:
-                                st.text(f"Processing {i+1}/{cases_count}: {case_id}")
-                            
-                            progress_bar.progress((i + 1) / cases_count)
-                            
-                            try:
-                                # Create filled PDF using SAVED positions
-                                filled_pdf = create_filled_pdf(case, st.session_state.pdf_bytes, st.session_state.font_bytes)
-                                
-                                if filled_pdf:
-                                    filename = f"{case_id}_filled.pdf"
-                                    filled_pdfs[filename] = filled_pdf
-                                else:
-                                    failed_cases.append(f"{case_id}: PDF creation returned None")
-                            except Exception as e:
-                                failed_cases.append(f"{case_id}: {str(e)}")
+                filled_pdfs = {}
+                failed_cases = []
+                
+                try:
+                    for i, case in enumerate(st.session_state.cases_data):
+                        if not isinstance(case, dict):
+                            failed_cases.append(f"Case {i+1}: Invalid")
+                            continue
                         
-                        # Create ZIP
-                        if filled_pdfs:
-                            zip_buffer = BytesIO()
-                            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                                for filename, pdf_data in filled_pdfs.items():
-                                    zip_file.writestr(filename, pdf_data)
-                            
-                            zip_buffer.seek(0)
-                            
-                            status_container.empty()
-                            progress_bar.empty()
-                            
-                            if failed_cases:
-                                st.warning(f"⚠️ Processed {len(filled_pdfs)} of {cases_count} forms")
-                                with st.expander("Failed Cases"):
-                                    for error in failed_cases:
-                                        st.error(error)
-                            else:
-                                st.success(f"🎉 Successfully processed all {len(filled_pdfs)} forms with your saved positions!")
-                                st.balloons()
-                            
-                            # Download button
-                            st.download_button(
-                                label=f"📥 Download {len(filled_pdfs)} Filled Forms (ZIP)",
-                                data=zip_buffer.getvalue(),
-                                file_name=f"medical_forms_{len(filled_pdfs)}_cases.zip",
-                                mime="application/zip",
-                                use_container_width=True
+                        case_id = case.get('case_id', f'case_{i+1:03d}')
+                        status_text.text(f"Processing {i+1}/{cases_count}: {case_id}")
+                        progress_bar.progress((i + 1) / cases_count)
+                        
+                        try:
+                            filled_pdf = create_filled_pdf(
+                                case, 
+                                st.session_state.pdf_bytes, 
+                                st.session_state.font_bytes
                             )
                             
-                            # Show ZIP contents
-                            with st.expander("📦 ZIP Contents"):
-                                for filename in filled_pdfs.keys():
-                                    st.text(f"✓ {filename}")
-                        else:
-                            status_container.empty()
-                            progress_bar.empty()
-                            st.error("❌ No forms were successfully processed")
-                            if failed_cases:
-                                with st.expander("Error Details"):
-                                    for error in failed_cases:
-                                        st.error(error)
+                            if filled_pdf:
+                                filename = f"{case_id}_filled.pdf"
+                                filled_pdfs[filename] = filled_pdf
+                        except Exception as e:
+                            failed_cases.append(f"{case_id}: {str(e)[:50]}")
                     
-                    except Exception as e:
-                        status_container.empty()
-                        progress_bar.empty()
-                        st.error(f"❌ Critical error: {str(e)}")
-                        st.exception(e)
+                    status_text.empty()
+                    progress_bar.empty()
+                    
+                    if filled_pdfs:
+                        # Create ZIP
+                        zip_buffer = BytesIO()
+                        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+                            for filename, pdf_data in filled_pdfs.items():
+                                zf.writestr(filename, pdf_data)
+                        
+                        zip_buffer.seek(0)
+                        
+                        st.success(f"✅ Generated {len(filled_pdfs)} PDFs!")
+                        
+                        if failed_cases:
+                            with st.expander("⚠️ Failed"):
+                                for err in failed_cases:
+                                    st.text(err)
+                        
+                        st.download_button(
+                            label=f"💾 Download {len(filled_pdfs)} PDFs (ZIP)",
+                            data=zip_buffer.getvalue(),
+                            file_name=f"filled_forms_{len(filled_pdfs)}.zip",
+                            mime="application/zip",
+                            use_container_width=True
+                        )
+                        
+                        st.balloons()
+                    else:
+                        st.error("❌ No PDFs generated")
+                        
+                except Exception as e:
+                    st.error(f"❌ Error: {str(e)}")
+                    status_text.empty()
+                    progress_bar.empty()
         
         st.markdown("---")
-        st.subheader("📋 Instructions")
-        st.markdown("""
-        **How it works:**
-        1. ✏️ **Adjust positions** using sliders
-        2. 💾 **SAVE the page** before switching pages
-        3. 🚀 **Generate PDFs** with saved positions
         
-        **Important:**
-        - ⚠️ Unsaved changes won't be used in PDFs
-        - 💾 Save each page separately
-        - ✅ Green checkmarks = saved positions
+        # Help
+        st.subheader("❓ Help")
+        st.markdown("""
+        **Steps:**
+        1. Select page & field
+        2. Adjust with sliders
+        3. **SAVE the page**
+        4. Generate PDFs
+        
+        **Tips:**
+        - Preview updates live
+        - Save before switching
+        - Both pages must be saved
         """)
 
 if __name__ == "__main__":

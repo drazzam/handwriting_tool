@@ -818,20 +818,12 @@ def main():
         if current_page in st.session_state.pdf_images:
             fig = create_interactive_plotly_figure(current_page)
             if fig:
-                # Render the Plotly chart and capture relayout events
-                plotly_events = st.plotly_chart(
+                # Render the Plotly chart
+                st.plotly_chart(
                     fig, 
                     use_container_width=True, 
-                    key=f"plotly_{current_page}",
-                    on_select=False,
-                    selection_mode=['points', 'box', 'lasso']
+                    key=f"plotly_{current_page}"
                 )
-                
-                # Check if shapes were modified by dragging
-                if st.session_state.get(f'plotly_{current_page}'):
-                    # This is a placeholder - Streamlit's plotly_chart doesn't directly return events
-                    # We'll use the slider approach as primary, but keep draggable for visual feedback
-                    pass
         
         # Position Controls (Sliders)
         st.subheader(f"⚙️ Fine-tune '{st.session_state.selected_field}' Position")

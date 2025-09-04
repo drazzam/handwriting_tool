@@ -122,6 +122,7 @@
       "what_did_right": "Appropriate use of screening tools and empathetic communication approach",
       "needs_development": "More confidence with mental health medication prescribing and crisis assessment"
     },
+    "signature_mi": "Dr. Davis",
     "epa_assessment": {
       "epa_tested": ["EPA 6", "EPA 8", "EPA 10", "EPA 14"],
       "rubric_levels": ["Level C", "Level B", "Level C", "Level C"],
